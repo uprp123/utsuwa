@@ -21,6 +21,11 @@ const DEFAULT_SETTINGS: PuppetSettings = {
 	url: 'ws://127.0.0.1:8768/ws?room=lobby&name=Utsuwa'
 };
 
+const LEGACY_UTSUWA_URLS = new Set([
+	'ws://127.0.0.1:8767/ws?room=lobby&name=Utsuwa',
+	'ws://localhost:8767/ws?room=lobby&name=Utsuwa'
+]);
+
 function createPuppetStore() {
 	let settings = $state<PuppetSettings>({ ...DEFAULT_SETTINGS });
 	let status = $state<PuppetStatus>('disabled');
@@ -35,6 +40,10 @@ function createPuppetStore() {
 		if (saved) {
 			try {
 				settings = { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
+				if (LEGACY_UTSUWA_URLS.has(settings.url)) {
+					settings.url = DEFAULT_SETTINGS.url;
+					localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+				}
 			} catch {
 				// Keep safe defaults when old settings are malformed.
 			}
@@ -130,8 +139,7 @@ function createPuppetStore() {
 		listener = onMessage;
 		if (settings.enabled) connect();
 		return () => {
-			listener = null;
-			disconnect();
+			if (listener === onMessage) listener = null;
 		};
 	}
 
