@@ -275,7 +275,7 @@
 		const delay = (min + Math.random() * (max - min)) * 1000;
 		randomIdleTimeout = setTimeout(() => {
 			const ids = vrmStore.randomIdleAnimationIds;
-			if (ids.length && !shouldTalk && !isEmotePlaying && !photomodeStore.active) {
+			if (ids.length && vrmStore.presenceState === 'present' && !shouldTalk && !isEmotePlaying && !photomodeStore.active) {
 				vrmStore.setCurrentAnimation(ids[Math.floor(Math.random() * ids.length)], false);
 			}
 			scheduleRandomIdleMotion();
@@ -324,7 +324,7 @@
 		const loops = 1 + Math.random();
 		const delay = duration * loops * 1000;
 		idleCycleTimeout = setTimeout(() => {
-			if (!shouldTalk && !isEmotePlaying && !photomodeStore.active) {
+			if (vrmStore.presenceState === 'present' && !shouldTalk && !isEmotePlaying && !photomodeStore.active) {
 				playNextIdleAnimation(targetVrm, targetMixer);
 			} else {
 				// Retry later if we're busy (talking, emoting, or posing for a photo)
@@ -685,6 +685,9 @@
 		const animationRevision = vrmStore.currentAnimationRevision;
 		const animId = currentAnimation;
 		const shouldLoopMotion = vrmStore.currentAnimationLoop;
+		const presenceAction = vrmStore.pendingPresenceAction;
+		const transitionIn = vrmStore.motionTransitionInSeconds;
+		const transitionOut = vrmStore.motionTransitionOutSeconds;
 		const currentVrm = vrm;
 		const currentMixer = mixer;
 		const currentIdleAction = untrack(() => idleAction);
@@ -694,7 +697,7 @@
 		// Stop any current emote
 		const prevEmote = untrack(() => emoteAction);
 		if (prevEmote) {
-			prevEmote.fadeOut(0.3);
+			prevEmote.fadeOut(transitionIn);
 		}
 
 		// If no emote selected, just ensure idle is playing
@@ -702,7 +705,7 @@
 			isEmotePlaying = false;
 			emoteAction = null;
 			if (currentIdleAction && !currentIdleAction.isRunning()) {
-				currentIdleAction.reset().fadeIn(0.3).play();
+				currentIdleAction.reset().fadeIn(transitionOut).play();
 			}
 			return;
 		}
@@ -720,12 +723,12 @@
 					// Fade out idle animation
 					const currentIdle = idleAction;
 					if (currentIdle) {
-						currentIdle.fadeOut(0.2);
+						currentIdle.fadeOut(transitionIn);
 					}
 					// A mapped motion can be requested after the talking loop has already
 					// started. Fade that loop out too, otherwise both clips blend and the
 					// downloaded motion looks like a different, repeating action.
-					if (talkingAction) talkingAction.fadeOut(0.2);
+					if (talkingAction) talkingAction.fadeOut(transitionIn);
 
 					// Create and play emote
 					const clip = createVRMAnimationClip(vrmAnimation, vrm);
@@ -733,7 +736,7 @@
 					action.setLoop(shouldLoopMotion ? THREE.LoopRepeat : THREE.LoopOnce, shouldLoopMotion ? Infinity : 1);
 					action.clampWhenFinished = !shouldLoopMotion;
 					action.timeScale = 1;
-					action.reset().fadeIn(0.6).play();
+					action.reset().fadeIn(transitionIn).play();
 					emoteAction = action;
 					isEmotePlaying = true;
 
@@ -749,8 +752,14 @@
 							return;
 						}
 
+						if (presenceAction === 'exit') {
+							// Keep the one-shot exit clip clamped on its final frame. Do not
+							// resume idle and do not loop; the entrance motion replaces this pose.
+							vrmStore.notifyAnimationCompleted(animId);
+							return;
+						}
 						vrmStore.notifyAnimationCompleted(animId);
-						const fadeSeconds = 0.6;
+						const fadeSeconds = transitionOut;
 						action.fadeOut(fadeSeconds);
 						if (talkingAction) talkingAction.fadeOut(fadeSeconds);
 						const returnIdle = idleAction;
@@ -851,7 +860,7 @@
 				vrm = loadedVrm;
 				group = loadedVrm.scene;
 				materialAppearance = new WeakMap();
-				modelOpacity = vrmStore.presenceState === 'hidden' ? 0 : 1;
+				modelOpacity = 1;
 				applyModelOpacity(modelOpacity);
 				const newMixer = new THREE.AnimationMixer(loadedVrm.scene);
 				mixer = newMixer;
@@ -991,17 +1000,9 @@
 	useTask((delta) => {
 		if (!vrm) return;
 		let reactionHappyEnvelope = 0;
-		const targetOpacity = vrmStore.presenceState === 'hidden' ? 0 : 1;
-		const fadeSeconds = vrmStore.presenceSettings.fadeSeconds;
-		const previousOpacity = modelOpacity;
-		modelOpacity = fadeSeconds <= 0
-			? targetOpacity
-			: modelOpacity + (targetOpacity - modelOpacity) * Math.min(1, delta / fadeSeconds * 4);
-		if (Math.abs(modelOpacity - targetOpacity) < 0.002) modelOpacity = targetOpacity;
-		if (modelOpacity !== previousOpacity) applyModelOpacity(modelOpacity);
-		// Some VRM materials ignore runtime opacity changes. The root visibility is
-		// the final guarantee that a completed exit cannot leave the avatar onscreen.
-		if (group) group.visible = modelOpacity > 0.001;
+		// A completed exit intentionally stays visible on the final frame of its
+		// one-shot motion. The entrance clip crossfades from that held pose.
+		if (group) group.visible = true;
 
 		// Undo last frame's tap nudges before anything writes bones this frame.
 		// When the mixer overwrites the rotation anyway this is a no-op; when it

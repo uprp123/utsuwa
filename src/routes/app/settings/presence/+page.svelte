@@ -50,9 +50,8 @@
 				<label><span>退場モーション</span><select bind:value={draft.exitAnimationId}><option value={null}>モーションなし</option>{#each vrmStore.availableAnimations as motion}<option value={motion.id}>{motion.name}</option>{/each}</select></label>
 			</section>
 			<section class="section">
-				<h3>表示</h3>
-				<label><span>フェード時間（秒）</span><input type="number" min="0" max="10" step="0.1" bind:value={draft.fadeSeconds} /></label>
-				<p>退場モーション終了後にフェードアウトします。入場時はモデルを表示し、フェードインしながらモーションを再生します。</p>
+				<h3>退場時の姿勢</h3>
+				<p>退場モーションは1回だけ再生し、終了フレームの姿勢を保持します。待機モーションへは戻らず、次の入場モーションがその姿勢から始まります。</p>
 			</section>
 			<section class="section">
 				<h3>自動退場</h3>

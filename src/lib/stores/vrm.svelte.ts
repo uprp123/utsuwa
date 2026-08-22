@@ -55,6 +55,8 @@ interface MotionBackup {
 	randomIdleAnimationIds: string[];
 	randomIdleMinSeconds: number;
 	randomIdleMaxSeconds: number;
+	motionTransitionInSeconds?: number;
+	motionTransitionOutSeconds?: number;
 	motionAssignments: Record<string, string>;
 	presenceSettings?: PresenceSettings;
 }
@@ -252,10 +254,16 @@ function createVrmStore() {
 			? presenceSettings.exitAnimationId
 			: presenceSettings.enterAnimationId;
 		if (pendingPresenceAnimationId) setCurrentAnimation(pendingPresenceAnimationId, false);
-		else finishPresenceAction(action);
+		else {
+			if (action === 'enter') setCurrentAnimation(null);
+			finishPresenceAction(action);
+		}
 	}
 	function notifyAnimationCompleted(animationId: string) {
-		if (pendingPresenceAction && pendingPresenceAnimationId === animationId) finishPresenceAction(pendingPresenceAction);
+		const pendingAnimation = availableAnimations.find((item) => item.id === pendingPresenceAnimationId);
+		if (pendingPresenceAction && (
+			pendingPresenceAnimationId === animationId || pendingAnimation?.url === animationId
+		)) finishPresenceAction(pendingPresenceAction);
 	}
 	if (browser) setInterval(() => {
 		if (!presenceSettings.autoExitEnabled || presenceState !== 'present') {
@@ -306,6 +314,12 @@ function createVrmStore() {
 	let randomIdleAnimationRevision = $state(0);
 	let randomIdleMinSeconds = $state(10);
 	let randomIdleMaxSeconds = $state(20);
+	let motionTransitionInSeconds = $state(0.6);
+	let motionTransitionOutSeconds = $state(0.6);
+	const sanitizeMotionTransition = (value: unknown, fallback = 0.6) => {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? Math.max(0.05, Math.min(10, parsed)) : fallback;
+	};
 	let motionAssignments = $state<Record<string, string>>({});
 
 	// Selectable one-shot emotes (played via the developer tools). These are the
@@ -352,6 +366,8 @@ function createVrmStore() {
 				...((await motionStorage?.getItem<Record<string, string>>('motion-assignments')) ?? {}) };
 			randomIdleMinSeconds = (await motionStorage?.getItem<number>('random-idle-min-seconds')) ?? 10;
 			randomIdleMaxSeconds = (await motionStorage?.getItem<number>('random-idle-max-seconds')) ?? 20;
+			motionTransitionInSeconds = sanitizeMotionTransition(await motionStorage?.getItem<number>('motion-transition-in-seconds'));
+			motionTransitionOutSeconds = sanitizeMotionTransition(await motionStorage?.getItem<number>('motion-transition-out-seconds'));
 			applyAnimationAssignments();
 		} catch (e) {
 			console.error('Failed to restore custom animations:', e);
@@ -435,6 +451,8 @@ function createVrmStore() {
 			randomIdleAnimationIds: [...randomIdleAnimationIds],
 			randomIdleMinSeconds,
 			randomIdleMaxSeconds,
+			motionTransitionInSeconds,
+			motionTransitionOutSeconds,
 			motionAssignments: { ...motionAssignments },
 			presenceSettings: { ...presenceSettings }
 		};
@@ -488,6 +506,8 @@ function createVrmStore() {
 			: [];
 		randomIdleMinSeconds = Math.max(1, Number(backup.randomIdleMinSeconds) || 10);
 		randomIdleMaxSeconds = Math.max(randomIdleMinSeconds, Number(backup.randomIdleMaxSeconds) || 20);
+		motionTransitionInSeconds = sanitizeMotionTransition(backup.motionTransitionInSeconds);
+		motionTransitionOutSeconds = sanitizeMotionTransition(backup.motionTransitionOutSeconds);
 		motionAssignments = Object.fromEntries(
 			Object.entries(backup.motionAssignments ?? {}).filter(
 				([slot, animationId]) => (MOTION_SLOTS as readonly string[]).includes(slot) && validId(animationId)
@@ -508,6 +528,8 @@ function createVrmStore() {
 		await motionStorage?.setItem('random-idle-animation-ids', randomIdleAnimationIds);
 		await motionStorage?.setItem('random-idle-min-seconds', randomIdleMinSeconds);
 		await motionStorage?.setItem('random-idle-max-seconds', randomIdleMaxSeconds);
+		await motionStorage?.setItem('motion-transition-in-seconds', motionTransitionInSeconds);
+		await motionStorage?.setItem('motion-transition-out-seconds', motionTransitionOutSeconds);
 		await motionStorage?.setItem('motion-assignments', motionAssignments);
 		applyAnimationAssignments();
 		return restored.length;
@@ -575,6 +597,13 @@ function createVrmStore() {
 		await motionStorage?.setItem('random-idle-min-seconds', randomIdleMinSeconds);
 		await motionStorage?.setItem('random-idle-max-seconds', randomIdleMaxSeconds);
 		randomIdleAnimationRevision += 1;
+	}
+
+	async function setMotionTransition(inSeconds: number, outSeconds: number): Promise<void> {
+		motionTransitionInSeconds = sanitizeMotionTransition(inSeconds);
+		motionTransitionOutSeconds = sanitizeMotionTransition(outSeconds);
+		await motionStorage?.setItem('motion-transition-in-seconds', motionTransitionInSeconds);
+		await motionStorage?.setItem('motion-transition-out-seconds', motionTransitionOutSeconds);
 	}
 
 	async function setMotionAssignment(slot: string, animationId: string | null): Promise<void> {
@@ -1014,6 +1043,7 @@ function createVrmStore() {
 		stopThinkingMotion,
 		get presenceSettings() { return presenceSettings; },
 		get presenceState() { return presenceState; },
+		get pendingPresenceAction() { return pendingPresenceAction; },
 		get autoExitSecondsRemaining() { return autoExitSecondsRemaining; },
 		updatePresenceSettings,
 		requestPresence,
@@ -1034,6 +1064,9 @@ function createVrmStore() {
 		get randomIdleAnimationRevision() { return randomIdleAnimationRevision; },
 		get randomIdleMinSeconds() { return randomIdleMinSeconds; },
 		get randomIdleMaxSeconds() { return randomIdleMaxSeconds; },
+		get motionTransitionInSeconds() { return motionTransitionInSeconds; },
+		get motionTransitionOutSeconds() { return motionTransitionOutSeconds; },
+		setMotionTransition,
 		get motionAssignments() {
 			return motionAssignments;
 		},
