@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { T, useThrelte, useTask } from '@threlte/core';
 	import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-	import { VRMLoaderPlugin, VRM, VRMUtils } from '@pixiv/three-vrm';
+	import { VRMLoaderPlugin, VRM, VRMUtils, type VRMExpression } from '@pixiv/three-vrm';
 	import { createVRMAnimationClip } from '@pixiv/three-vrm-animation';
 	import { loadVrmAnimation } from '$lib/services/vrm-animations';
 	import { vrmStore } from '$lib/stores/vrm.svelte';
@@ -116,6 +116,12 @@
 	let talkingClip = $state<THREE.AnimationClip | null>(null); // Cached talking clip
 	let emoteAction = $state<THREE.AnimationAction | null>(null); // One-shot emote animations
 	let lastConfiguredExpression: string | null = null;
+	let happyBlinkOverride: { expression: VRMExpression; value: VRMExpression['overrideBlink'] } | null = null;
+	function restoreHappyBlinkOverride() {
+		if (!happyBlinkOverride) return;
+		happyBlinkOverride.expression.overrideBlink = happyBlinkOverride.value;
+		happyBlinkOverride = null;
+	}
 	let isEmotePlaying = $state(false); // True when an emote is playing (disables blinking)
 	let lastIdleIndex = $state(-1); // Track last played idle to avoid repeats
 	const currentAnimation = $derived(vrmStore.currentAnimation);
@@ -1215,16 +1221,22 @@
 			lastConfiguredExpression = request.name;
 			setExpression(request.name, (settings.strengths[request.name] ?? request.value) * envelope);
 			if (request.name === 'happy' && settings.happyBlink > 0) {
+				const happyExpression = expressionManager.getExpression(findExpression(request.name) ?? request.name);
+				if (happyExpression && !happyBlinkOverride) {
+					happyBlinkOverride = { expression: happyExpression, value: happyExpression.overrideBlink };
+					happyExpression.overrideBlink = 'none';
+				}
 				for (const blinkName of ['blink', 'Blink', 'blinkLeft', 'blinkRight', 'eyeBlinkLeft', 'eyeBlinkRight']) {
 					setExpression(blinkName, settings.happyBlink * envelope);
 				}
-			}
+			} else restoreHappyBlinkOverride();
 			if (elapsed >= total) {
 				setExpression(request.name, 0);
 				for (const blinkName of ['blink', 'Blink', 'blinkLeft', 'blinkRight', 'eyeBlinkLeft', 'eyeBlinkRight']) setExpression(blinkName, 0);
+				restoreHappyBlinkOverride();
 				vrmStore.clearActiveExpression(request.seq);
 			}
-		}
+		} else restoreHappyBlinkOverride();
 
 		// Commit blinking, emotion and lip-sync together after all values are set.
 		expressionManager.update();
