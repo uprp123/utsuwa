@@ -148,6 +148,12 @@
 	const currentAnimation = $derived(vrmStore.currentAnimation);
 	// Talking animation plays when TTS is speaking OR when text-based talking is triggered
 	const shouldTalk = $derived(ttsStore.isSpeaking || vrmStore.isTalking);
+	let wasTalkingForPresence = false;
+	$effect(() => {
+		const talking = shouldTalk;
+		if (talking && !wasTalkingForPresence) vrmStore.markPresenceActivity();
+		wasTalkingForPresence = talking;
+	});
 
 	// === Blinking State ===
 	let blinkTimer = $state(0);

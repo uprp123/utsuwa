@@ -28,6 +28,8 @@ export interface PresenceSettings {
 	enterAnimationId: string | null;
 	exitAnimationId: string | null;
 	fadeSeconds: number;
+	autoExitEnabled: boolean;
+	autoExitMinutes: number;
 }
 export type PresenceState = 'present' | 'entering' | 'exiting' | 'hidden';
 const DEFAULT_EXPRESSION_SETTINGS: ExpressionSettings = {
@@ -190,11 +192,16 @@ function createVrmStore() {
 	let currentAnimation = $state<string | null>(null);
 	let currentAnimationRevision = $state(0);
 	let currentAnimationLoop = $state(false);
-	const defaultPresenceSettings: PresenceSettings = { enterAnimationId: null, exitAnimationId: null, fadeSeconds: 1 };
+	const defaultPresenceSettings: PresenceSettings = {
+		enterAnimationId: null, exitAnimationId: null, fadeSeconds: 1,
+		autoExitEnabled: false, autoExitMinutes: 30
+	};
 	let presenceSettings = $state<PresenceSettings>({ ...defaultPresenceSettings });
 	let presenceState = $state<PresenceState>('present');
 	let pendingPresenceAction: 'enter' | 'exit' | null = null;
 	let pendingPresenceAnimationId: string | null = null;
+	let lastPresenceActivityAt = Date.now();
+	let autoExitSecondsRemaining = $state<number | null>(null);
 	const sanitizeFadeSeconds = (value: unknown, fallback = 1) => {
 		const parsed = Number(value);
 		return Number.isFinite(parsed) ? Math.max(0, Math.min(10, parsed)) : fallback;
@@ -205,7 +212,9 @@ function createVrmStore() {
 			if (saved) presenceSettings = {
 				enterAnimationId: typeof saved.enterAnimationId === 'string' ? saved.enterAnimationId : null,
 				exitAnimationId: typeof saved.exitAnimationId === 'string' ? saved.exitAnimationId : null,
-				fadeSeconds: sanitizeFadeSeconds(saved.fadeSeconds)
+				fadeSeconds: sanitizeFadeSeconds(saved.fadeSeconds),
+				autoExitEnabled: Boolean(saved.autoExitEnabled),
+				autoExitMinutes: Math.max(0.1, Math.min(1440, Number(saved.autoExitMinutes) || 30))
 			};
 		} catch { presenceSettings = { ...defaultPresenceSettings }; }
 	}
@@ -213,9 +222,18 @@ function createVrmStore() {
 		presenceSettings = {
 			enterAnimationId: next.enterAnimationId || null,
 			exitAnimationId: next.exitAnimationId || null,
-			fadeSeconds: sanitizeFadeSeconds(next.fadeSeconds, 0)
+			fadeSeconds: sanitizeFadeSeconds(next.fadeSeconds, 0),
+			autoExitEnabled: Boolean(next.autoExitEnabled),
+			autoExitMinutes: Math.max(0.1, Math.min(1440, Number(next.autoExitMinutes) || 30))
 		};
+		markPresenceActivity();
 		if (browser) localStorage.setItem('utsuwa-presence-settings', JSON.stringify(presenceSettings));
+	}
+	function markPresenceActivity() {
+		lastPresenceActivityAt = Date.now();
+		autoExitSecondsRemaining = presenceSettings.autoExitEnabled
+			? Math.ceil(presenceSettings.autoExitMinutes * 60)
+			: null;
 	}
 	function finishPresenceAction(action: 'enter' | 'exit') {
 		if (pendingPresenceAction !== action) return;
@@ -224,8 +242,9 @@ function createVrmStore() {
 		pendingPresenceAnimationId = null;
 	}
 	function requestPresence(action: 'enter' | 'exit') {
-		if (action === 'exit' && presenceState === 'hidden') return;
-		if (action === 'enter' && presenceState === 'present') return;
+		if (action === 'exit' && (presenceState === 'hidden' || presenceState === 'exiting')) return;
+		if (action === 'enter' && (presenceState === 'present' || presenceState === 'entering')) return;
+		if (action === 'enter') markPresenceActivity();
 		pendingPresenceAction = action;
 		presenceState = action === 'exit' ? 'exiting' : 'entering';
 		pendingPresenceAnimationId = action === 'exit'
@@ -237,6 +256,15 @@ function createVrmStore() {
 	function notifyAnimationCompleted(animationId: string) {
 		if (pendingPresenceAction && pendingPresenceAnimationId === animationId) finishPresenceAction(pendingPresenceAction);
 	}
+	if (browser) setInterval(() => {
+		if (!presenceSettings.autoExitEnabled || presenceState !== 'present') {
+			autoExitSecondsRemaining = null;
+			return;
+		}
+		const timeoutSeconds = presenceSettings.autoExitMinutes * 60;
+		autoExitSecondsRemaining = Math.max(0, Math.ceil(timeoutSeconds - (Date.now() - lastPresenceActivityAt) / 1000));
+		if (autoExitSecondsRemaining === 0 && !isTalking && !currentAnimation) requestPresence('exit');
+	}, 1000);
 
 	// Talking animation state (triggered by text output)
 	let isTalking = $state(false);
@@ -247,6 +275,7 @@ function createVrmStore() {
 	let reactionRequest = $state<{ zone: TouchZone; seq: number } | null>(null);
 	let reactionSeq = 0;
 	function requestReaction(zone: TouchZone) {
+		markPresenceActivity();
 		reactionRequest = { zone, seq: ++reactionSeq };
 	}
 
@@ -466,7 +495,9 @@ function createVrmStore() {
 		if (backup.presenceSettings) updatePresenceSettings({
 			enterAnimationId: validId(backup.presenceSettings.enterAnimationId) ? backup.presenceSettings.enterAnimationId : null,
 			exitAnimationId: validId(backup.presenceSettings.exitAnimationId) ? backup.presenceSettings.exitAnimationId : null,
-			fadeSeconds: Number(backup.presenceSettings.fadeSeconds) || 0
+			fadeSeconds: Number(backup.presenceSettings.fadeSeconds) || 0,
+			autoExitEnabled: Boolean(backup.presenceSettings.autoExitEnabled),
+			autoExitMinutes: Number(backup.presenceSettings.autoExitMinutes) || 30
 		});
 		await saveAnimationList();
 		if (activeIdleAnimationId) await motionStorage?.setItem('active-idle-animation-id', activeIdleAnimationId);
@@ -804,6 +835,7 @@ function createVrmStore() {
 	// Start talking animation based on text length
 	// Estimates ~15 characters per second of speaking
 	function startTalking(text: string) {
+		markPresenceActivity();
 		// Clear any existing timeout
 		if (talkingTimeout) {
 			clearTimeout(talkingTimeout);
@@ -961,8 +993,10 @@ function createVrmStore() {
 		get currentAnimationLoop() { return currentAnimationLoop; },
 		get presenceSettings() { return presenceSettings; },
 		get presenceState() { return presenceState; },
+		get autoExitSecondsRemaining() { return autoExitSecondsRemaining; },
 		updatePresenceSettings,
 		requestPresence,
+		markPresenceActivity,
 		notifyAnimationCompleted,
 		get customAnimations() {
 			return customAnimations;
