@@ -5,6 +5,11 @@
 	let error = $state<string | null>(null);
 	let notice = $state<string | null>(null);
 	let importing = $state(false);
+	const motionSlotLabels: Record<string, string> = {
+		happy:'喜び', wave:'手を振る', clap:'拍手', cheer:'応援', surprised:'驚き', thinking:'考える',
+		sad:'悲しい', angry:'怒り', bow:'お辞儀', dance:'ダンス', showcase:'全身を見せる',
+		greeting:'挨拶', peace:'Vサイン', shoot:'撃つ', spin:'回る', model_pose:'モデルポーズ', squat:'屈伸運動'
+	};
 
 	async function importFiles(event: Event) {
 		const input = event.currentTarget as HTMLInputElement;
@@ -144,7 +149,7 @@
 		<h3>AIモーション割り当て</h3><p>AICommentViewerから送られるモーション名に動きを割り当てます。</p>
 		{#each MOTION_SLOTS as slot}
 			<label>
-				<span>{slot}</span>
+				<span>{motionSlotLabels[slot] ?? slot}</span>
 				<select value={vrmStore.motionAssignments[slot] ?? ''} onchange={(e) => vrmStore.setMotionAssignment(slot, e.currentTarget.value || null)}>
 					<option value="">モーションなし</option>
 					{#each vrmStore.availableAnimations as motion}<option value={motion.id}>{motion.name}</option>{/each}
