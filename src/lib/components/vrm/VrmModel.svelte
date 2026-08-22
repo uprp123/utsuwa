@@ -832,7 +832,8 @@
 			return plugin;
 		});
 
-		loader.load(
+		let loadAttempt = 0;
+		const loadModel = () => loader.load(
 			url,
 			(gltf) => {
 				const loadedVrm = gltf.userData.vrm as VRM;
@@ -934,9 +935,16 @@
 			(error) => {
 				if (cancelled) return;
 				console.error('Error loading VRM:', error);
-				vrmStore.setError('Failed to load VRM model');
+				if (loadAttempt++ === 0) {
+					setTimeout(loadModel, 400);
+					return;
+				}
+				const detail = error instanceof Error ? error.message : String(error);
+				vrmStore.setLoading(false);
+				vrmStore.setError(`VRMモデルを読み込めませんでした: ${detail}`);
 			}
 		);
+		loadModel();
 
 		return () => {
 			// Cleanup on unmount or URL change

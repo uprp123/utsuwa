@@ -391,6 +391,7 @@ function createVrmStore() {
 			noMotionLockFacing = (await motionStorage?.getItem<boolean>('no-motion-lock-facing')) ?? true;
 			noMotionFacingStrength = sanitizeFacingStrength(await motionStorage?.getItem<number>('no-motion-facing-strength'));
 			applyAnimationAssignments();
+			await autoloadMotionBackups();
 		} catch (e) {
 			console.error('Failed to restore custom animations:', e);
 		}
@@ -486,7 +487,30 @@ function createVrmStore() {
 		return new Blob([JSON.stringify(backup)], { type: 'application/json' });
 	}
 
-	async function importMotionBackup(file: File): Promise<number> {
+	async function autoloadMotionBackups(): Promise<void> {
+		if (!browser) return;
+		try {
+			const manifestResponse = await fetch('/motion-autoload/index.json', { cache: 'no-store' });
+			if (!manifestResponse.ok) return;
+			const manifest = await manifestResponse.json() as { files?: unknown };
+			if (!Array.isArray(manifest.files)) return;
+			for (const name of manifest.files) {
+				if (typeof name !== 'string' || !name.toLowerCase().endsWith('.json') || name.includes('/') || name.includes('\\')) continue;
+				const response = await fetch(`/motion-autoload/${encodeURIComponent(name)}`, { cache: 'no-store' });
+				if (!response.ok) continue;
+				const text = await response.text();
+				const signature = `${name}:${text.length}:${text.slice(0, 80)}:${text.slice(-80)}`;
+				const storageKey = `utsuwa-motion-autoload:${name}`;
+				if (localStorage.getItem(storageKey) === signature) continue;
+				await importMotionBackup(new File([text], name, { type: 'application/json' }), true);
+				localStorage.setItem(storageKey, signature);
+			}
+		} catch (error) {
+			console.error('Failed to auto-load motion backups:', error);
+		}
+	}
+
+	async function importMotionBackup(file: File, merge = false): Promise<number> {
 		if (file.size > 250 * 1024 * 1024) throw new Error('Motion backup is too large (maximum 250 MB)');
 		let parsed: unknown;
 		try {
@@ -516,15 +540,20 @@ function createVrmStore() {
 			});
 		}
 
+		const restoredIds = new Set(restored.map((item) => item.metadata.id));
 		for (const animation of customAnimations) {
+			if (merge && !restoredIds.has(animation.id)) continue;
 			if (animation.url.startsWith('blob:')) URL.revokeObjectURL(animation.url);
 			await motionStorage?.removeItem(`animation-blob-${animation.id}`);
 		}
 		for (const item of restored) await motionStorage?.setItem(`animation-blob-${item.metadata.id}`, item.blob);
 
-		customAnimations = restored.map(({ metadata, blob }) => ({ ...metadata, url: URL.createObjectURL(blob) }));
+		const restoredAnimations = restored.map(({ metadata, blob }) => ({ ...metadata, url: URL.createObjectURL(blob) }));
+		customAnimations = merge
+			? [...customAnimations.filter((animation) => !restoredIds.has(animation.id)), ...restoredAnimations]
+			: restoredAnimations;
 		availableAnimations = [...builtInAnimations, ...customAnimations];
-		const validIds = new Set([...seen, ...builtInAnimations.map((item) => item.id)]);
+		const validIds = new Set([...customAnimations.map((item) => item.id), ...builtInAnimations.map((item) => item.id)]);
 		const validId = (value: unknown): value is string => typeof value === 'string' && validIds.has(value);
 		activeIdleAnimationId = validId(backup.activeIdleAnimationId) ? backup.activeIdleAnimationId : null;
 		activeTalkingAnimationId = validId(backup.activeTalkingAnimationId) ? backup.activeTalkingAnimationId : null;
@@ -538,11 +567,12 @@ function createVrmStore() {
 		noMotionAnimationId = validId(backup.noMotionAnimationId) ? backup.noMotionAnimationId : null;
 		noMotionLockFacing = backup.noMotionLockFacing === undefined ? true : Boolean(backup.noMotionLockFacing);
 		noMotionFacingStrength = sanitizeFacingStrength(backup.noMotionFacingStrength);
-		motionAssignments = Object.fromEntries(
+		const restoredAssignments = Object.fromEntries(
 			Object.entries(backup.motionAssignments ?? {}).filter(
 				([slot, animationId]) => (MOTION_SLOTS as readonly string[]).includes(slot) && (validId(animationId) || animationId === NO_MOTION_ASSIGNMENT)
 			)
 		);
+		motionAssignments = merge ? { ...motionAssignments, ...restoredAssignments } : restoredAssignments;
 		if (backup.presenceSettings) updatePresenceSettings({
 			enterAnimationId: validId(backup.presenceSettings.enterAnimationId) ? backup.presenceSettings.enterAnimationId : null,
 			exitAnimationId: validId(backup.presenceSettings.exitAnimationId) ? backup.presenceSettings.exitAnimationId : null,
