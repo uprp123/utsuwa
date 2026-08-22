@@ -135,6 +135,10 @@
 	let talkingAction = $state<THREE.AnimationAction | null>(null); // Looping talking animation
 	let talkingClip = $state<THREE.AnimationClip | null>(null); // Cached talking clip
 	let emoteAction = $state<THREE.AnimationAction | null>(null); // One-shot emote animations
+	let facingHips: THREE.Object3D | null = null;
+	let facingBaseYaw = 0;
+	const facingEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+	const wrapAngle = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle));
 	let lastConfiguredExpression: string | null = null;
 	let happyBlinkOverride: { expression: VRMExpression; value: VRMExpression['overrideBlink'] } | null = null;
 	let happyBlinkApplied = false;
@@ -852,6 +856,11 @@
 
 				// Set a natural idle pose (arms down instead of T-pose)
 				setIdlePose(loadedVrm);
+				facingHips = loadedVrm.humanoid.getNormalizedBoneNode('hips');
+				if (facingHips) {
+					facingEuler.setFromQuaternion(facingHips.quaternion, 'YXZ');
+					facingBaseYaw = facingEuler.y;
+				}
 
 				// Capture this rig's authored spring values before `vrm` flips the
 				// physics-intensity effect, so it applies over fresh bases.
@@ -963,6 +972,8 @@
 				vrm = null;
 				group = null;
 				springBase = [];
+				facingHips = null;
+				facingBaseYaw = 0;
 				poseAction = null;
 				poseClipCache.clear();
 				activePulses = [];
@@ -1015,6 +1026,14 @@
 
 		// Update animation mixer
 		mixer?.update(delta);
+
+		// Imported Mixamo motions can rotate the hips/root away from the camera.
+		// Correct only the configured share of yaw; keep all other motion intact.
+		if (facingHips && vrmStore.currentAnimationLocksFacing) {
+			facingEuler.setFromQuaternion(facingHips.quaternion, 'YXZ');
+			facingEuler.y += wrapAngle(facingBaseYaw - facingEuler.y) * vrmStore.currentAnimationFacingStrength;
+			facingHips.quaternion.setFromEuler(facingEuler);
+		}
 
 		// Tap reactions: decaying additive nudges layered over whatever the
 		// mixer wrote, rendered this frame (so the body sways with the physics

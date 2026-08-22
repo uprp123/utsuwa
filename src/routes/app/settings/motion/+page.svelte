@@ -179,6 +179,13 @@
 			{#each vrmStore.customAnimations as motion}
 				<div class="motion-row">
 					<div><strong>{motion.name}</strong><small>VRMA</small></div>
+					<div class="motion-options">
+						<label class="facing-check"><input type="checkbox" checked={Boolean(motion.lockFacing)} onchange={(e) => vrmStore.setAnimationFacing(motion.id, e.currentTarget.checked, motion.facingStrength ?? 1)} />正面向きを維持</label>
+						<label class="facing-strength" class:disabled={!motion.lockFacing}>
+							<span>補正の強さ {Math.round((motion.facingStrength ?? 1) * 100)}%</span>
+							<input type="range" min="0" max="100" step="5" value={(motion.facingStrength ?? 1) * 100} disabled={!motion.lockFacing} oninput={(e) => vrmStore.setAnimationFacing(motion.id, Boolean(motion.lockFacing), Number(e.currentTarget.value) / 100)} />
+						</label>
+					</div>
 					<div class="actions">
 						<label class="loop-check"><input type="checkbox" checked={Boolean(motion.loop)} onchange={(e) => vrmStore.setAnimationLoop(motion.id, e.currentTarget.checked)} />会話中ループ</label>
 						<button type="button" onclick={() => previewMotion(motion.id)}>1回プレビュー</button>
@@ -187,10 +194,25 @@
 				</div>
 			{/each}
 		{/if}
+		<p class="hint">手振り・拍手などで体が横を向く場合は「正面向きを維持」をONにします。回転や振り返りを含むモーションではOFFにしてください。</p>
 	</section>
 </div>
 
 <style>
 	@import '../settings-page.css';
-	.page{z-index:1}.section{margin-bottom:1rem}.section h3{margin:0 0 .35rem}.section p{margin:.2rem 0;color:var(--text-secondary);font-size:.875rem}.import-section,.backup-section{display:flex;align-items:center;justify-content:space-between;gap:1rem}.backup-actions{display:flex;gap:.5rem;flex-shrink:0}.import-button,button{border:0;border-radius:var(--radius-md);padding:.65rem .9rem;background:var(--accent);color:white;font-weight:600;cursor:pointer}.import-button input{display:none}.import-button.disabled,button:disabled{opacity:.6;pointer-events:none}.assignments{display:grid;gap:1rem}.assignments label{display:grid;grid-template-columns:150px 1fr;align-items:center;gap:1rem}.assignments span{font-weight:600}.assignments select,.transition-settings input{padding:.7rem;border:1px solid var(--border-light);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary)}.transition-settings .interval-settings{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:1rem;margin-top:.8rem}.transition-settings label{display:grid;gap:.45rem;font-weight:600}.check-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.55rem;margin-top:1rem}.check-list label{display:flex;align-items:center;gap:.55rem;padding:.65rem;background:var(--bg-secondary);border-radius:var(--radius-md)}.check-list input{width:1.1rem;height:1.1rem}.motion-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.85rem 0;border-bottom:1px solid var(--border-light)}.motion-row:last-child{border-bottom:0}.motion-row div:first-child{display:flex;flex-direction:column;gap:.2rem}.motion-row small{color:var(--text-tertiary)}.actions{display:flex;gap:.5rem}.actions .danger{background:var(--color-error)}.empty{padding:1rem 0}.error{color:var(--color-error);font-weight:600}.notice{color:var(--color-success);font-weight:600}@media(max-width:640px){.import-section,.backup-section,.motion-row{align-items:stretch;flex-direction:column}.backup-actions{flex-wrap:wrap}.assignments label,.transition-settings .interval-settings{grid-template-columns:1fr}.actions button{flex:1}}
+	.page{z-index:1}.section{margin-bottom:1rem}.section h3{margin:0 0 .35rem}.section p{margin:.2rem 0;color:var(--text-secondary);font-size:.875rem}.import-section,.backup-section{display:flex;align-items:center;justify-content:space-between;gap:1rem}.backup-actions{display:flex;gap:.5rem;flex-shrink:0}.import-button,button{border:0;border-radius:var(--radius-md);padding:.65rem .9rem;background:var(--accent);color:white;font-weight:600;cursor:pointer}.import-button input{display:none}.import-button.disabled,button:disabled{opacity:.6;pointer-events:none}.assignments{display:grid;gap:1rem}.assignments label{display:grid;grid-template-columns:150px 1fr;align-items:center;gap:1rem}.assignments span{font-weight:600}.assignments select,.transition-settings input{padding:.7rem;border:1px solid var(--border-light);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary)}.transition-settings .interval-settings{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:1rem;margin-top:.8rem}.transition-settings label{display:grid;gap:.45rem;font-weight:600}.check-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.55rem;margin-top:1rem}.check-list label{display:flex;align-items:center;gap:.55rem;padding:.65rem;background:var(--bg-secondary);border-radius:var(--radius-md)}.check-list input{width:1.1rem;height:1.1rem}.motion-row{gap:1rem;padding:.85rem 0;border-bottom:1px solid var(--border-light)}.motion-row:last-child{border-bottom:0}.motion-row div:first-child{display:flex;flex-direction:column;gap:.2rem}.motion-row small{color:var(--text-tertiary)}.actions{display:flex;gap:.5rem}.actions .danger{background:var(--color-error)}.empty{padding:1rem 0}.error{color:var(--color-error);font-weight:600}.notice{color:var(--color-success);font-weight:600}@media(max-width:640px){.import-section,.backup-section{align-items:stretch;flex-direction:column}.backup-actions{flex-wrap:wrap}.assignments label,.transition-settings .interval-settings{grid-template-columns:1fr}.actions button{flex:1}}
+	.motion-row {
+		display: grid;
+		grid-template-columns: minmax(140px, 1fr) minmax(250px, 1.5fr) auto;
+		align-items: center;
+	}
+	.motion-options { display: grid; gap: .45rem; }
+	.facing-check { display: flex; align-items: center; gap: .5rem; font-weight: 600; }
+	.facing-strength { display: grid; grid-template-columns: 115px minmax(110px, 1fr); align-items: center; gap: .65rem; font-size: .82rem; }
+	.facing-strength.disabled { opacity: .45; }
+	.facing-strength input { width: 100%; }
+	.hint { margin-top: .85rem !important; }
+	@media (max-width: 760px) {
+		.motion-row { grid-template-columns: 1fr; align-items: stretch; }
+	}
 </style>

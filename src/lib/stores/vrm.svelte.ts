@@ -20,6 +20,8 @@ export interface CustomAnimation {
 	url: string;
 	createdAt: number;
 	loop?: boolean;
+	lockFacing?: boolean;
+	facingStrength?: number;
 }
 export interface ExpressionSettings {
 	strengths: Record<string, number>; happyBlink: number; fadeIn: number; fadeOut: number;
@@ -43,6 +45,8 @@ interface MotionBackupAnimation {
 	createdAt: number;
 	data: string;
 	loop?: boolean;
+	lockFacing?: boolean;
+	facingStrength?: number;
 }
 
 interface MotionBackup {
@@ -320,6 +324,10 @@ function createVrmStore() {
 		const parsed = Number(value);
 		return Number.isFinite(parsed) ? Math.max(0.05, Math.min(10, parsed)) : fallback;
 	};
+	const sanitizeFacingStrength = (value: unknown, fallback = 1) => {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : fallback;
+	};
 	let motionAssignments = $state<Record<string, string>>({});
 
 	// Selectable one-shot emotes (played via the developer tools). These are the
@@ -352,7 +360,7 @@ function createVrmStore() {
 			const restored: CustomAnimation[] = [];
 			for (const animation of saved) {
 				const blob = await motionStorage?.getItem<Blob>(`animation-blob-${animation.id}`);
-				if (blob) restored.push({ ...animation, url: URL.createObjectURL(blob) });
+				if (blob) restored.push({ ...animation, loop: Boolean(animation.loop), lockFacing: Boolean(animation.lockFacing), facingStrength: sanitizeFacingStrength(animation.facingStrength), url: URL.createObjectURL(blob) });
 			}
 			customAnimations = restored;
 			availableAnimations = [...builtInAnimations, ...restored];
@@ -389,7 +397,7 @@ function createVrmStore() {
 	async function saveAnimationList() {
 		await motionStorage?.setItem(
 			'animation-list',
-			customAnimations.map(({ id, name, createdAt, loop }) => ({ id, name, createdAt, loop: Boolean(loop) }))
+			customAnimations.map(({ id, name, createdAt, loop, lockFacing, facingStrength }) => ({ id, name, createdAt, loop: Boolean(loop), lockFacing: Boolean(lockFacing), facingStrength: sanitizeFacingStrength(facingStrength) }))
 		);
 	}
 
@@ -403,7 +411,7 @@ function createVrmStore() {
 			name: file.name.replace(/\.vrma$/i, ''),
 			url: URL.createObjectURL(blob),
 			createdAt: Date.now()
-			, loop: false
+			, loop: false, lockFacing: false, facingStrength: 1
 		};
 		customAnimations = [...customAnimations, animation];
 		availableAnimations = [...builtInAnimations, ...customAnimations];
@@ -438,6 +446,8 @@ function createVrmStore() {
 				name: animation.name,
 				createdAt: animation.createdAt,
 				loop: Boolean(animation.loop),
+				lockFacing: Boolean(animation.lockFacing),
+				facingStrength: sanitizeFacingStrength(animation.facingStrength),
 				data: await blobToDataUrl(stored)
 			});
 		}
@@ -484,7 +494,7 @@ function createVrmStore() {
 			if (!id || seen.has(id)) throw new Error('Motion backup contains duplicate motion IDs');
 			seen.add(id);
 			restored.push({
-				metadata: { id, name: item.name.trim() || 'Imported motion', createdAt: Number(item.createdAt) || Date.now(), loop: Boolean((item as MotionBackupAnimation & { loop?: boolean }).loop) },
+				metadata: { id, name: item.name.trim() || 'Imported motion', createdAt: Number(item.createdAt) || Date.now(), loop: Boolean(item.loop), lockFacing: Boolean(item.lockFacing), facingStrength: sanitizeFacingStrength(item.facingStrength) },
 				blob: dataUrlToBlob(item.data)
 			});
 		}
@@ -587,6 +597,12 @@ function createVrmStore() {
 
 	async function setAnimationLoop(id: string, loop: boolean): Promise<void> {
 		customAnimations = customAnimations.map((animation) => animation.id === id ? { ...animation, loop } : animation);
+		availableAnimations = [...builtInAnimations, ...customAnimations];
+		await saveAnimationList();
+	}
+
+	async function setAnimationFacing(id: string, lockFacing: boolean, facingStrength: number): Promise<void> {
+		customAnimations = customAnimations.map((animation) => animation.id === id ? { ...animation, lockFacing: Boolean(lockFacing), facingStrength: sanitizeFacingStrength(facingStrength) } : animation);
 		availableAnimations = [...builtInAnimations, ...customAnimations];
 		await saveAnimationList();
 	}
@@ -1038,6 +1054,8 @@ function createVrmStore() {
 		clearActiveExpression,
 		get currentAnimationRevision() { return currentAnimationRevision; },
 		get currentAnimationLoop() { return currentAnimationLoop; },
+		get currentAnimationLocksFacing() { return Boolean(customAnimations.find((animation) => animation.url === currentAnimation)?.lockFacing); },
+		get currentAnimationFacingStrength() { return sanitizeFacingStrength(customAnimations.find((animation) => animation.url === currentAnimation)?.facingStrength); },
 		get thinkingMotionActive() { return thinkingMotionActive; },
 		startThinkingMotion,
 		stopThinkingMotion,
@@ -1126,6 +1144,7 @@ function createVrmStore() {
 		setTalkingAnimation,
 		setRandomIdleAnimation,
 		setAnimationLoop,
+		setAnimationFacing,
 		setRandomIdleInterval,
 		setMotionAssignment,
 		playMappedMotion,
