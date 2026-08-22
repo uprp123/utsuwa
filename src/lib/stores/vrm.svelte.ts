@@ -24,6 +24,12 @@ export interface CustomAnimation {
 export interface ExpressionSettings {
 	strengths: Record<string, number>; happyBlink: number; fadeIn: number; fadeOut: number;
 }
+export interface PresenceSettings {
+	enterAnimationId: string | null;
+	exitAnimationId: string | null;
+	fadeSeconds: number;
+}
+export type PresenceState = 'present' | 'entering' | 'exiting' | 'hidden';
 const DEFAULT_EXPRESSION_SETTINGS: ExpressionSettings = {
 	strengths: { happy: .75, sad: .75, angry: .75, surprised: .75, relaxed: .75 },
 	happyBlink: .35, fadeIn: .4, fadeOut: .6
@@ -48,6 +54,7 @@ interface MotionBackup {
 	randomIdleMinSeconds: number;
 	randomIdleMaxSeconds: number;
 	motionAssignments: Record<string, string>;
+	presenceSettings?: PresenceSettings;
 }
 
 export const MOTION_SLOTS = [
@@ -183,6 +190,53 @@ function createVrmStore() {
 	let currentAnimation = $state<string | null>(null);
 	let currentAnimationRevision = $state(0);
 	let currentAnimationLoop = $state(false);
+	const defaultPresenceSettings: PresenceSettings = { enterAnimationId: null, exitAnimationId: null, fadeSeconds: 1 };
+	let presenceSettings = $state<PresenceSettings>({ ...defaultPresenceSettings });
+	let presenceState = $state<PresenceState>('present');
+	let pendingPresenceAction: 'enter' | 'exit' | null = null;
+	let pendingPresenceAnimationId: string | null = null;
+	const sanitizeFadeSeconds = (value: unknown, fallback = 1) => {
+		const parsed = Number(value);
+		return Number.isFinite(parsed) ? Math.max(0, Math.min(10, parsed)) : fallback;
+	};
+	if (browser) {
+		try {
+			const saved = JSON.parse(localStorage.getItem('utsuwa-presence-settings') || 'null') as Partial<PresenceSettings> | null;
+			if (saved) presenceSettings = {
+				enterAnimationId: typeof saved.enterAnimationId === 'string' ? saved.enterAnimationId : null,
+				exitAnimationId: typeof saved.exitAnimationId === 'string' ? saved.exitAnimationId : null,
+				fadeSeconds: sanitizeFadeSeconds(saved.fadeSeconds)
+			};
+		} catch { presenceSettings = { ...defaultPresenceSettings }; }
+	}
+	function updatePresenceSettings(next: PresenceSettings) {
+		presenceSettings = {
+			enterAnimationId: next.enterAnimationId || null,
+			exitAnimationId: next.exitAnimationId || null,
+			fadeSeconds: sanitizeFadeSeconds(next.fadeSeconds, 0)
+		};
+		if (browser) localStorage.setItem('utsuwa-presence-settings', JSON.stringify(presenceSettings));
+	}
+	function finishPresenceAction(action: 'enter' | 'exit') {
+		if (pendingPresenceAction !== action) return;
+		presenceState = action === 'exit' ? 'hidden' : 'present';
+		pendingPresenceAction = null;
+		pendingPresenceAnimationId = null;
+	}
+	function requestPresence(action: 'enter' | 'exit') {
+		if (action === 'exit' && presenceState === 'hidden') return;
+		if (action === 'enter' && presenceState === 'present') return;
+		pendingPresenceAction = action;
+		presenceState = action === 'exit' ? 'exiting' : 'entering';
+		pendingPresenceAnimationId = action === 'exit'
+			? presenceSettings.exitAnimationId
+			: presenceSettings.enterAnimationId;
+		if (pendingPresenceAnimationId) setCurrentAnimation(pendingPresenceAnimationId, false);
+		else finishPresenceAction(action);
+	}
+	function notifyAnimationCompleted(animationId: string) {
+		if (pendingPresenceAction && pendingPresenceAnimationId === animationId) finishPresenceAction(pendingPresenceAction);
+	}
 
 	// Talking animation state (triggered by text output)
 	let isTalking = $state(false);
@@ -351,7 +405,8 @@ function createVrmStore() {
 			randomIdleAnimationIds: [...randomIdleAnimationIds],
 			randomIdleMinSeconds,
 			randomIdleMaxSeconds,
-			motionAssignments: { ...motionAssignments }
+			motionAssignments: { ...motionAssignments },
+			presenceSettings: { ...presenceSettings }
 		};
 		return new Blob([JSON.stringify(backup)], { type: 'application/json' });
 	}
@@ -408,6 +463,11 @@ function createVrmStore() {
 				([slot, animationId]) => (MOTION_SLOTS as readonly string[]).includes(slot) && validId(animationId)
 			)
 		);
+		if (backup.presenceSettings) updatePresenceSettings({
+			enterAnimationId: validId(backup.presenceSettings.enterAnimationId) ? backup.presenceSettings.enterAnimationId : null,
+			exitAnimationId: validId(backup.presenceSettings.exitAnimationId) ? backup.presenceSettings.exitAnimationId : null,
+			fadeSeconds: Number(backup.presenceSettings.fadeSeconds) || 0
+		});
 		await saveAnimationList();
 		if (activeIdleAnimationId) await motionStorage?.setItem('active-idle-animation-id', activeIdleAnimationId);
 		else await motionStorage?.removeItem('active-idle-animation-id');
@@ -434,6 +494,13 @@ function createVrmStore() {
 		motionAssignments = Object.fromEntries(
 			Object.entries(motionAssignments).filter(([, animationId]) => animationId !== id)
 		);
+		if (presenceSettings.enterAnimationId === id || presenceSettings.exitAnimationId === id) {
+			updatePresenceSettings({
+				...presenceSettings,
+				enterAnimationId: presenceSettings.enterAnimationId === id ? null : presenceSettings.enterAnimationId,
+				exitAnimationId: presenceSettings.exitAnimationId === id ? null : presenceSettings.exitAnimationId
+			});
+		}
 		await saveAnimationList();
 		await motionStorage?.setItem('active-idle-animation-id', activeIdleAnimationId);
 		await motionStorage?.setItem('active-talking-animation-id', activeTalkingAnimationId);
@@ -892,6 +959,11 @@ function createVrmStore() {
 		clearActiveExpression,
 		get currentAnimationRevision() { return currentAnimationRevision; },
 		get currentAnimationLoop() { return currentAnimationLoop; },
+		get presenceSettings() { return presenceSettings; },
+		get presenceState() { return presenceState; },
+		updatePresenceSettings,
+		requestPresence,
+		notifyAnimationCompleted,
 		get customAnimations() {
 			return customAnimations;
 		},

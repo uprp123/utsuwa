@@ -70,6 +70,26 @@
 	let { url }: Props = $props();
 	let vrm = $state<VRM | null>(null);
 	let group = $state<THREE.Group | null>(null);
+	let modelOpacity = 1;
+	let materialAppearance = new WeakMap<THREE.Material, { opacity: number; transparent: boolean }>();
+	function applyModelOpacity(value: number) {
+		if (!group) return;
+		group.visible = value > 0.001;
+		group.traverse((object) => {
+			if (!(object instanceof THREE.Mesh)) return;
+			const materials = Array.isArray(object.material) ? object.material : [object.material];
+			for (const material of materials) {
+				let base = materialAppearance.get(material);
+				if (!base) {
+					base = { opacity: material.opacity, transparent: material.transparent };
+					materialAppearance.set(material, base);
+				}
+				material.opacity = base.opacity * value;
+				material.transparent = base.transparent || value < 0.999;
+				material.needsUpdate = true;
+			}
+		});
+	}
 
 	// === Spring-bone physics ===
 	// Authored per-joint values captured at load. The intensity setting always
@@ -723,6 +743,7 @@
 							return;
 						}
 
+						vrmStore.notifyAnimationCompleted(animId);
 						const fadeSeconds = 0.6;
 						action.fadeOut(fadeSeconds);
 						if (talkingAction) talkingAction.fadeOut(fadeSeconds);
@@ -762,6 +783,7 @@
 			})
 			.catch((error) => {
 				console.error('Error loading emote animation:', error);
+				vrmStore.notifyAnimationCompleted(animId);
 			});
 	});
 
@@ -822,6 +844,9 @@
 
 				vrm = loadedVrm;
 				group = loadedVrm.scene;
+				materialAppearance = new WeakMap();
+				modelOpacity = vrmStore.presenceState === 'hidden' ? 0 : 1;
+				applyModelOpacity(modelOpacity);
 				const newMixer = new THREE.AnimationMixer(loadedVrm.scene);
 				mixer = newMixer;
 				vrmStore.setVrm(loadedVrm);
@@ -960,6 +985,14 @@
 	useTask((delta) => {
 		if (!vrm) return;
 		let reactionHappyEnvelope = 0;
+		const targetOpacity = vrmStore.presenceState === 'hidden' ? 0 : 1;
+		const fadeSeconds = vrmStore.presenceSettings.fadeSeconds;
+		const previousOpacity = modelOpacity;
+		modelOpacity = fadeSeconds <= 0
+			? targetOpacity
+			: modelOpacity + (targetOpacity - modelOpacity) * Math.min(1, delta / fadeSeconds * 4);
+		if (Math.abs(modelOpacity - targetOpacity) < 0.002) modelOpacity = targetOpacity;
+		if (modelOpacity !== previousOpacity) applyModelOpacity(modelOpacity);
 
 		// Undo last frame's tap nudges before anything writes bones this frame.
 		// When the mixer overwrites the rotation anyway this is a no-op; when it
