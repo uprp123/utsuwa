@@ -204,6 +204,7 @@ function createVrmStore() {
 	let currentAnimationLoop = $state(false);
 	let noMotionPlaying = $state(false);
 	let thinkingMotionActive = $state(false);
+	let thinkingHandoffTimer: ReturnType<typeof setTimeout> | null = null;
 	const defaultPresenceSettings: PresenceSettings = {
 		enterAnimationId: null, exitAnimationId: null, fadeSeconds: 1,
 		autoExitEnabled: false, autoExitMinutes: 30
@@ -702,10 +703,19 @@ function createVrmStore() {
 		return true;
 	}
 
-	function stopThinkingMotion() {
+	function stopThinkingMotion(holdForReply = false) {
 		if (!thinkingMotionActive) return;
 		thinkingMotionActive = false;
-		setCurrentAnimation(null);
+		if (holdForReply) {
+			// AICommentViewer sends thinking_stop immediately before the chat reply.
+			// Keep the current pose alive so the reply motion can crossfade directly
+			// instead of briefly falling through idle/talking in between.
+			if (thinkingHandoffTimer) clearTimeout(thinkingHandoffTimer);
+			thinkingHandoffTimer = setTimeout(() => {
+				thinkingHandoffTimer = null;
+				setCurrentAnimation(null);
+			}, 5000);
+		} else setCurrentAnimation(null);
 		markPresenceActivity();
 	}
 
@@ -929,6 +939,10 @@ function createVrmStore() {
 	}
 
 	function setCurrentAnimation(animationIdOrPath: string | null, loopOverride?: boolean) {
+		if (thinkingHandoffTimer) {
+			clearTimeout(thinkingHandoffTimer);
+			thinkingHandoffTimer = null;
+		}
 		noMotionPlaying = false;
 		// Accept either an animation ID or a direct path
 		// If it's a path (starts with /), use it directly

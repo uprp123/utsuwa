@@ -93,7 +93,7 @@
 		stopPuppet = puppetStore.start(async (message) => {
 			if (message.type === 'character_control') {
 				if (message.action === 'thinking_start') vrmStore.startThinkingMotion();
-				else if (message.action === 'thinking_stop') vrmStore.stopThinkingMotion();
+				else if (message.action === 'thinking_stop') vrmStore.stopThinkingMotion(true);
 				else {
 					vrmStore.requestPresence(message.action);
 					const expected = message.action === 'enter' ? 'present' : 'hidden';

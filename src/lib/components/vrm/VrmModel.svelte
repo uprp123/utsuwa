@@ -698,14 +698,13 @@
 
 		if (!currentVrm || !currentMixer) return;
 
-		// Stop any current emote
+		// Keep the current emote alive until its replacement has finished loading.
+		// Fading it here created a zero-weight gap that looked like a double snap.
 		const prevEmote = untrack(() => emoteAction);
-		if (prevEmote) {
-			prevEmote.fadeOut(transitionIn);
-		}
 
 		// If no emote selected, just ensure idle is playing
 		if (!animId) {
+			if (prevEmote) prevEmote.fadeOut(transitionOut);
 			isEmotePlaying = false;
 			emoteAction = null;
 			if (currentIdleAction && !currentIdleAction.isRunning()) {
@@ -723,6 +722,7 @@
 			.then((vrmAnimation) => {
 				untrack(() => {
 					if (!vrm || !mixer || vrmStore.currentAnimationRevision !== animationRevision) return;
+					if (prevEmote) prevEmote.fadeOut(transitionIn);
 
 					// Fade out idle animation
 					const currentIdle = idleAction;
