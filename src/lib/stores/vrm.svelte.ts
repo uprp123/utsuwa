@@ -423,6 +423,20 @@ function createVrmStore() {
 		isTalking = false;
 	}
 
+	function flashExpression(name: string, value = 0.75, durationMs = 3000) {
+		const manager = vrm?.expressionManager;
+		if (!manager || !availableExpressions.includes(name)) return false;
+		manager.setValue(name, value);
+		manager.update();
+		setTimeout(() => {
+			if (vrm?.expressionManager) {
+				vrm.expressionManager.setValue(name, 0);
+				vrm.expressionManager.update();
+			}
+		}, durationMs);
+		return true;
+	}
+
 	function loadTempModel(file: File): void {
 		tempVrm.load(tempState, file);
 	}
@@ -580,6 +594,7 @@ function createVrmStore() {
 		setCurrentAnimation,
 		startTalking,
 		stopTalking,
+		flashExpression,
 		addModel,
 		removeModel,
 		getActiveModel,
