@@ -681,13 +681,17 @@
 					if (currentIdle) {
 						currentIdle.fadeOut(0.2);
 					}
+					// A mapped motion can be requested after the talking loop has already
+					// started. Fade that loop out too, otherwise both clips blend and the
+					// downloaded motion looks like a different, repeating action.
+					if (talkingAction) talkingAction.fadeOut(0.2);
 
 					// Create and play emote
 					const clip = createVRMAnimationClip(vrmAnimation, vrm);
 					const action = mixer.clipAction(clip);
 					action.setLoop(THREE.LoopOnce, 1);
 					action.clampWhenFinished = true;
-					action.timeScale = 1.5;
+					action.timeScale = 1;
 					action.reset().fadeIn(0.2).play();
 					emoteAction = action;
 					isEmotePlaying = true;
@@ -712,6 +716,7 @@
 
 						const fadeSeconds = 0.6;
 						action.fadeOut(fadeSeconds);
+						if (talkingAction) talkingAction.fadeOut(fadeSeconds);
 						const returnIdle = idleAction;
 						if (returnIdle) returnIdle.reset().fadeIn(fadeSeconds).play();
 						setTimeout(() => {
@@ -723,14 +728,23 @@
 							vrmStore.setCurrentAnimation(null);
 						}, fadeSeconds * 1000);
 					};
+					let finishHandled = false;
+					const motionFinished = () => {
+						if (finishHandled || emoteAction !== action) return;
+						finishHandled = true;
+						capturedMixer.removeEventListener('finished', onFinished);
+						if (speechWaitTimer) clearTimeout(speechWaitTimer);
+						returnAfterSpeech();
+					};
 					const onFinished = (e: { action: THREE.AnimationAction }) => {
 						if (e.action === action) {
-							capturedMixer.removeEventListener('finished', onFinished);
-							if (speechWaitTimer) clearTimeout(speechWaitTimer);
-							returnAfterSpeech();
+							motionFinished();
 						}
 					};
 					capturedMixer.addEventListener('finished', onFinished);
+					// Some converted VRMA clips don't emit Three.js's finished event.
+					// Use the actual clip duration as a bounded one-shot fallback.
+					setTimeout(motionFinished, Math.min(30, Math.max(0.1, clip.duration)) * 1000 + 100);
 				});
 			})
 			.catch((error) => {
