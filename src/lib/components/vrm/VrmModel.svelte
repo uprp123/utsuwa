@@ -332,6 +332,28 @@
 			});
 	}
 
+	// Custom motion assignments can change without reloading the avatar.
+	$effect(() => {
+		vrmStore.idleAnimationRevision;
+		const targetVrm = untrack(() => vrm);
+		const targetMixer = untrack(() => mixer);
+		if (!targetVrm || !targetMixer) return;
+		if (idleCycleTimeout) clearTimeout(idleCycleTimeout);
+		if (idleAction) idleAction.fadeOut(0.3);
+		startIdleAnimation(targetVrm, targetMixer);
+	});
+
+	$effect(() => {
+		vrmStore.talkingAnimationRevision;
+		const targetVrm = untrack(() => vrm);
+		const targetMixer = untrack(() => mixer);
+		if (!targetVrm || !targetMixer) return;
+		talkingAction?.stop();
+		talkingAction = null;
+		talkingClip = null;
+		loadTalkingAnimation(targetVrm, targetMixer);
+	});
+
 	// === Photo mode ===
 	// A held pose is a single-frame clip: play, pause at t=0, and let the weight
 	// crossfade do the transition. vrm.update() keeps running in the render task,

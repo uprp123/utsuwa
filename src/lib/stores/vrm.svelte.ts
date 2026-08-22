@@ -14,6 +14,13 @@ export interface VrmModel {
 	createdAt: number;
 }
 
+export interface CustomAnimation {
+	id: string;
+	name: string;
+	url: string;
+	createdAt: number;
+}
+
 // Default models bundled with the app (first one is loaded by default).
 // See static/models/README.md for each model's license.
 const DEFAULT_MODELS: VrmModel[] = [
@@ -52,6 +59,13 @@ const vrmStorage = browser
 			name: 'utsuwa-vrm',
 			storeName: 'models'
 		})
+	: null;
+
+const motionStorage = browser
+	? localforage.createInstance({
+		name: 'utsuwa-motion',
+		storeName: 'animations'
+	})
 	: null;
 
 function createVrmStore() {
@@ -137,21 +151,27 @@ function createVrmStore() {
 	let headScreenPosition = $state<{ x: number; y: number } | null>(null);
 	// Default animations
 	const idleAnimationUrl = '/animations/idle.vrma';
-	const talkingAnimationUrl = '/animations/talking.vrma';
+	let talkingAnimationUrl = $state('/animations/talking.vrma');
 
 	// All idle animations for random cycling
-	const idleAnimationUrls = [
+	const builtInIdleAnimationUrls = [
 		'/animations/idle.vrma',
 		'/animations/idle_2.vrma',
 		'/animations/idle_3.vrma',
 		'/animations/idle_4.vrma',
 		'/animations/idle_5.vrma'
 	];
+	let idleAnimationUrls = $state<string[]>([...builtInIdleAnimationUrls]);
+	let idleAnimationRevision = $state(0);
+	let talkingAnimationRevision = $state(0);
+	let customAnimations = $state<CustomAnimation[]>([]);
+	let activeIdleAnimationId = $state<string | null>(null);
+	let activeTalkingAnimationId = $state<string | null>(null);
 
 	// Selectable one-shot emotes (played via the developer tools). These are the
 	// VRMA files shipped in static/animations/ that aren't part of the idle cycle
 	// or the talking loop.
-	const availableAnimations: { id: string; name: string; url: string }[] = [
+	const builtInAnimations: { id: string; name: string; url: string }[] = [
 		{ id: 'vrma_01', name: 'Emote 1', url: '/animations/VRMA_01.vrma' },
 		{ id: 'vrma_02', name: 'Emote 2', url: '/animations/VRMA_02.vrma' },
 		{ id: 'vrma_03', name: 'Emote 3', url: '/animations/VRMA_03.vrma' },
@@ -160,6 +180,94 @@ function createVrmStore() {
 		{ id: 'vrma_06', name: 'Emote 6', url: '/animations/VRMA_06.vrma' },
 		{ id: 'vrma_07', name: 'Emote 7', url: '/animations/VRMA_07.vrma' }
 	];
+	let availableAnimations = $state<{ id: string; name: string; url: string }[]>([
+		...builtInAnimations
+	]);
+
+	if (browser) void hydrateAnimations();
+
+	async function hydrateAnimations() {
+		try {
+			const saved = (await motionStorage?.getItem<Array<Omit<CustomAnimation, 'url'>>>(
+				'animation-list'
+			)) ?? [];
+			const restored: CustomAnimation[] = [];
+			for (const animation of saved) {
+				const blob = await motionStorage?.getItem<Blob>(`animation-blob-${animation.id}`);
+				if (blob) restored.push({ ...animation, url: URL.createObjectURL(blob) });
+			}
+			customAnimations = restored;
+			availableAnimations = [...builtInAnimations, ...restored];
+			activeIdleAnimationId =
+				(await motionStorage?.getItem<string>('active-idle-animation-id')) ?? null;
+			activeTalkingAnimationId =
+				(await motionStorage?.getItem<string>('active-talking-animation-id')) ?? null;
+			applyAnimationAssignments();
+		} catch (e) {
+			console.error('Failed to restore custom animations:', e);
+		}
+	}
+
+	function applyAnimationAssignments() {
+		const idle = customAnimations.find((animation) => animation.id === activeIdleAnimationId);
+		idleAnimationUrls = idle ? [idle.url] : [...builtInIdleAnimationUrls];
+		const talking = customAnimations.find((animation) => animation.id === activeTalkingAnimationId);
+		talkingAnimationUrl = talking?.url ?? '/animations/talking.vrma';
+		idleAnimationRevision += 1;
+		talkingAnimationRevision += 1;
+	}
+
+	async function saveAnimationList() {
+		await motionStorage?.setItem(
+			'animation-list',
+			customAnimations.map(({ id, name, createdAt }) => ({ id, name, createdAt }))
+		);
+	}
+
+	async function addAnimation(file: File): Promise<void> {
+		if (!/\.vrma$/i.test(file.name)) throw new Error('Select a .vrma file');
+		const id = `custom-motion-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+		const blob = new Blob([await file.arrayBuffer()], { type: 'model/gltf-binary' });
+		await motionStorage?.setItem(`animation-blob-${id}`, blob);
+		const animation: CustomAnimation = {
+			id,
+			name: file.name.replace(/\.vrma$/i, ''),
+			url: URL.createObjectURL(blob),
+			createdAt: Date.now()
+		};
+		customAnimations = [...customAnimations, animation];
+		availableAnimations = [...builtInAnimations, ...customAnimations];
+		await saveAnimationList();
+	}
+
+	async function removeAnimation(id: string): Promise<void> {
+		const animation = customAnimations.find((item) => item.id === id);
+		if (!animation) return;
+		if (animation.url.startsWith('blob:')) URL.revokeObjectURL(animation.url);
+		await motionStorage?.removeItem(`animation-blob-${id}`);
+		customAnimations = customAnimations.filter((item) => item.id !== id);
+		availableAnimations = [...builtInAnimations, ...customAnimations];
+		if (activeIdleAnimationId === id) activeIdleAnimationId = null;
+		if (activeTalkingAnimationId === id) activeTalkingAnimationId = null;
+		await saveAnimationList();
+		await motionStorage?.setItem('active-idle-animation-id', activeIdleAnimationId);
+		await motionStorage?.setItem('active-talking-animation-id', activeTalkingAnimationId);
+		applyAnimationAssignments();
+	}
+
+	async function setIdleAnimation(id: string | null): Promise<void> {
+		activeIdleAnimationId = id;
+		if (id) await motionStorage?.setItem('active-idle-animation-id', id);
+		else await motionStorage?.removeItem('active-idle-animation-id');
+		applyAnimationAssignments();
+	}
+
+	async function setTalkingAnimation(id: string | null): Promise<void> {
+		activeTalkingAnimationId = id;
+		if (id) await motionStorage?.setItem('active-talking-animation-id', id);
+		else await motionStorage?.removeItem('active-talking-animation-id');
+		applyAnimationAssignments();
+	}
 
 	// Guard against saveToStorage running before init completes
 	let storageReady = false;
@@ -553,6 +661,21 @@ function createVrmStore() {
 		get availableAnimations() {
 			return availableAnimations;
 		},
+		get customAnimations() {
+			return customAnimations;
+		},
+		get activeIdleAnimationId() {
+			return activeIdleAnimationId;
+		},
+		get activeTalkingAnimationId() {
+			return activeTalkingAnimationId;
+		},
+		get idleAnimationRevision() {
+			return idleAnimationRevision;
+		},
+		get talkingAnimationRevision() {
+			return talkingAnimationRevision;
+		},
 		get idleAnimationUrl() {
 			return idleAnimationUrl;
 		},
@@ -595,6 +718,10 @@ function createVrmStore() {
 		startTalking,
 		stopTalking,
 		flashExpression,
+		addAnimation,
+		removeAnimation,
+		setIdleAnimation,
+		setTalkingAnimation,
 		addModel,
 		removeModel,
 		getActiveModel,
