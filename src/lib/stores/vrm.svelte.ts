@@ -171,6 +171,7 @@ function createVrmStore() {
 	let customAnimations = $state<CustomAnimation[]>([]);
 	let activeIdleAnimationId = $state<string | null>(null);
 	let activeTalkingAnimationId = $state<string | null>(null);
+	let randomIdleAnimationIds = $state<string[]>([]);
 	let motionAssignments = $state<Record<string, string>>({});
 
 	// Selectable one-shot emotes (played via the developer tools). These are the
@@ -207,6 +208,8 @@ function createVrmStore() {
 				(await motionStorage?.getItem<string>('active-idle-animation-id')) ?? null;
 			activeTalkingAnimationId =
 				(await motionStorage?.getItem<string>('active-talking-animation-id')) ?? null;
+			randomIdleAnimationIds =
+				(await motionStorage?.getItem<string[]>('random-idle-animation-ids')) ?? [];
 			motionAssignments =
 				(await motionStorage?.getItem<Record<string, string>>('motion-assignments')) ?? {};
 			applyAnimationAssignments();
@@ -217,7 +220,12 @@ function createVrmStore() {
 
 	function applyAnimationAssignments() {
 		const idle = customAnimations.find((animation) => animation.id === activeIdleAnimationId);
-		idleAnimationUrls = idle ? [idle.url] : [...builtInIdleAnimationUrls];
+		const randomIdles = randomIdleAnimationIds
+			.map((id) => customAnimations.find((animation) => animation.id === id)?.url)
+			.filter((url): url is string => Boolean(url));
+		idleAnimationUrls = idle
+			? [...new Set([idle.url, ...randomIdles])]
+			: [...new Set([...builtInIdleAnimationUrls, ...randomIdles])];
 		const talking = customAnimations.find((animation) => animation.id === activeTalkingAnimationId);
 		talkingAnimationUrl = talking?.url ?? '/animations/talking.vrma';
 		idleAnimationRevision += 1;
@@ -256,12 +264,14 @@ function createVrmStore() {
 		availableAnimations = [...builtInAnimations, ...customAnimations];
 		if (activeIdleAnimationId === id) activeIdleAnimationId = null;
 		if (activeTalkingAnimationId === id) activeTalkingAnimationId = null;
+		randomIdleAnimationIds = randomIdleAnimationIds.filter((animationId) => animationId !== id);
 		motionAssignments = Object.fromEntries(
 			Object.entries(motionAssignments).filter(([, animationId]) => animationId !== id)
 		);
 		await saveAnimationList();
 		await motionStorage?.setItem('active-idle-animation-id', activeIdleAnimationId);
 		await motionStorage?.setItem('active-talking-animation-id', activeTalkingAnimationId);
+		await motionStorage?.setItem('random-idle-animation-ids', randomIdleAnimationIds);
 		await motionStorage?.setItem('motion-assignments', motionAssignments);
 		applyAnimationAssignments();
 	}
@@ -277,6 +287,14 @@ function createVrmStore() {
 		activeTalkingAnimationId = id;
 		if (id) await motionStorage?.setItem('active-talking-animation-id', id);
 		else await motionStorage?.removeItem('active-talking-animation-id');
+		applyAnimationAssignments();
+	}
+
+	async function setRandomIdleAnimation(id: string, enabled: boolean): Promise<void> {
+		randomIdleAnimationIds = enabled
+			? [...new Set([...randomIdleAnimationIds, id])]
+			: randomIdleAnimationIds.filter((animationId) => animationId !== id);
+		await motionStorage?.setItem('random-idle-animation-ids', randomIdleAnimationIds);
 		applyAnimationAssignments();
 	}
 
@@ -698,6 +716,9 @@ function createVrmStore() {
 		get activeTalkingAnimationId() {
 			return activeTalkingAnimationId;
 		},
+		get randomIdleAnimationIds() {
+			return randomIdleAnimationIds;
+		},
 		get motionAssignments() {
 			return motionAssignments;
 		},
@@ -753,6 +774,7 @@ function createVrmStore() {
 		removeAnimation,
 		setIdleAnimation,
 		setTalkingAnimation,
+		setRandomIdleAnimation,
 		setMotionAssignment,
 		playMappedMotion,
 		addModel,

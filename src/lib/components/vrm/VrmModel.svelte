@@ -666,7 +666,7 @@
 					const clip = createVRMAnimationClip(vrmAnimation, vrm);
 					const action = mixer.clipAction(clip);
 					action.setLoop(THREE.LoopOnce, 1);
-					action.clampWhenFinished = true;
+					action.clampWhenFinished = false;
 					action.timeScale = 1.5;
 					action.reset().fadeIn(0.2).play();
 					emoteAction = action;
@@ -685,6 +685,7 @@
 					const onFinished = (e: { action: THREE.AnimationAction }) => {
 						if (e.action === action) {
 							capturedMixer.removeEventListener('finished', onFinished);
+							action.stop();
 							isEmotePlaying = false;
 							emoteAction = null;
 
@@ -693,10 +694,10 @@
 								capturedVrm.expressionManager?.setValue(happyExpr, 0);
 							}
 
-							// Resume idle animation
-							if (capturedIdleAction) {
-								capturedIdleAction.reset().fadeIn(0.3).play();
-							}
+							// Resume the correct base loop after the one-shot motion.
+							const stillSpeaking = ttsStore.isSpeaking || vrmStore.isTalking;
+							if (stillSpeaking && talkingAction) talkingAction.reset().fadeIn(0.3).play();
+							else if (capturedIdleAction) capturedIdleAction.reset().fadeIn(0.3).play();
 
 							vrmStore.setCurrentAnimation(null);
 						}
@@ -1124,27 +1125,32 @@
 			}
 		}
 
-		// Apply expression changes
-		expressionManager.update();
-
 		// === Lip-sync Animation ===
 		const visemes = lipSyncAnalyzer.update(delta);
+		const expressionNames = expressionManager.expressions.map((entry) => entry.expressionName);
+		const findExpression = (name: string) =>
+			expressionNames.find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+		const vrm1Names = ['aa', 'ih', 'ou', 'ee', 'oh'];
+		const legacyNames = ['a', 'i', 'u', 'e', 'o'];
+		const weights = [visemes.aa, visemes.ih, visemes.ou, visemes.ee, visemes.oh];
+		const family = vrm1Names.every((name) => findExpression(name))
+			? vrm1Names
+			: legacyNames.every((name) => findExpression(name))
+				? legacyNames
+				: null;
+		if (family) {
+			const dominantIndex = weights.indexOf(Math.max(...weights));
+			family.forEach((name, index) => {
+				const actualName = findExpression(name);
+				if (actualName) setExpression(actualName, index === dominantIndex ? Math.min(weights[index], 0.45) : 0);
+			});
+		} else {
+			const jawOpen = findExpression('jawOpen');
+			if (jawOpen) setExpression(jawOpen, Math.min(visemes.aa, 0.35));
+		}
 
-		// Apply viseme weights - try multiple naming conventions
-		// VRM 1.0 style
-		setExpression('aa', visemes.aa);
-		setExpression('ee', visemes.ee);
-		setExpression('ih', visemes.ih);
-		setExpression('oh', visemes.oh);
-		setExpression('ou', visemes.ou);
-		// VRM 0.x style
-		setExpression('a', visemes.aa);
-		setExpression('i', visemes.ih);
-		setExpression('u', visemes.ou);
-		setExpression('e', visemes.ee);
-		setExpression('o', visemes.oh);
-		// ARKit style (jawOpen for mouth)
-		setExpression('jawOpen', visemes.aa * 0.7);
+		// Commit blinking, emotion and lip-sync together after all values are set.
+		expressionManager.update();
 	});
 </script>
 

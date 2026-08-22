@@ -64,6 +64,27 @@
 		</label>
 	</section>
 
+	<section class="section random-idles">
+		<h3>Random idle motions</h3>
+		<p>Selected motions are mixed into the idle rotation. After each one, Utsuwa continues with another idle motion.</p>
+		{#if vrmStore.customAnimations.length === 0}
+			<p class="empty">Import VRMA files to add random idle motions.</p>
+		{:else}
+			<div class="check-list">
+				{#each vrmStore.customAnimations as motion}
+					<label>
+						<input
+							type="checkbox"
+							checked={vrmStore.randomIdleAnimationIds.includes(motion.id)}
+							onchange={(e) => vrmStore.setRandomIdleAnimation(motion.id, e.currentTarget.checked)}
+						/>
+						<span>{motion.name}</span>
+					</label>
+				{/each}
+			</div>
+		{/if}
+	</section>
+
 	<section class="section assignments">
 		<h3>AI motion mapping</h3>
 		<p>Map motion names sent by AICommentViewer to imported VRMA files.</p>
@@ -98,5 +119,5 @@
 
 <style>
 	@import '../settings-page.css';
-	.page{z-index:1}.section{margin-bottom:1rem}.section h3{margin:0 0 .35rem}.section p{margin:.2rem 0;color:var(--text-secondary);font-size:.875rem}.import-section{display:flex;align-items:center;justify-content:space-between;gap:1rem}.import-button,button{border:0;border-radius:var(--radius-md);padding:.65rem .9rem;background:var(--accent);color:white;font-weight:600;cursor:pointer}.import-button input{display:none}.import-button.disabled{opacity:.6;pointer-events:none}.assignments{display:grid;gap:1rem}.assignments label{display:grid;grid-template-columns:150px 1fr;align-items:center;gap:1rem}.assignments span{font-weight:600}.assignments select{padding:.7rem;border:1px solid var(--border-light);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary)}.motion-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.85rem 0;border-bottom:1px solid var(--border-light)}.motion-row:last-child{border-bottom:0}.motion-row div:first-child{display:flex;flex-direction:column;gap:.2rem}.motion-row small{color:var(--text-tertiary)}.actions{display:flex;gap:.5rem}.actions .danger{background:var(--color-error)}.empty{padding:1rem 0}.error{color:var(--color-error);font-weight:600}@media(max-width:640px){.import-section,.motion-row{align-items:stretch;flex-direction:column}.assignments label{grid-template-columns:1fr}.actions button{flex:1}}
+	.page{z-index:1}.section{margin-bottom:1rem}.section h3{margin:0 0 .35rem}.section p{margin:.2rem 0;color:var(--text-secondary);font-size:.875rem}.import-section{display:flex;align-items:center;justify-content:space-between;gap:1rem}.import-button,button{border:0;border-radius:var(--radius-md);padding:.65rem .9rem;background:var(--accent);color:white;font-weight:600;cursor:pointer}.import-button input{display:none}.import-button.disabled{opacity:.6;pointer-events:none}.assignments{display:grid;gap:1rem}.assignments label{display:grid;grid-template-columns:150px 1fr;align-items:center;gap:1rem}.assignments span{font-weight:600}.assignments select{padding:.7rem;border:1px solid var(--border-light);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary)}.check-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.55rem;margin-top:1rem}.check-list label{display:flex;align-items:center;gap:.55rem;padding:.65rem;background:var(--bg-secondary);border-radius:var(--radius-md)}.check-list input{width:1.1rem;height:1.1rem}.motion-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.85rem 0;border-bottom:1px solid var(--border-light)}.motion-row:last-child{border-bottom:0}.motion-row div:first-child{display:flex;flex-direction:column;gap:.2rem}.motion-row small{color:var(--text-tertiary)}.actions{display:flex;gap:.5rem}.actions .danger{background:var(--color-error)}.empty{padding:1rem 0}.error{color:var(--color-error);font-weight:600}@media(max-width:640px){.import-section,.motion-row{align-items:stretch;flex-direction:column}.assignments label{grid-template-columns:1fr}.actions button{flex:1}}
 </style>
