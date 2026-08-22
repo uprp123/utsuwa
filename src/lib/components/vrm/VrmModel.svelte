@@ -678,40 +678,36 @@
 						vrm.expressionManager?.setValue(happyExpr, 0.7);
 					}
 
-					// When emote finishes, return to idle
+					// Play the mapped motion exactly once. Keep its final pose while speech
+					// continues, then use the same short crossfade as the No motion path.
 					const capturedMixer = mixer;
 					const capturedVrm = vrm;
-					const capturedIdleAction = currentIdle;
-					let transitionStarted = false;
-					const beginReturnTransition = () => {
-						if (transitionStarted || emoteAction !== action) return;
-						transitionStarted = true;
-						const fadeSeconds = 0.8;
+					let speechWaitTimer: ReturnType<typeof setTimeout> | null = null;
+					const returnAfterSpeech = () => {
+						if (emoteAction !== action || mixer !== capturedMixer || vrm !== capturedVrm) return;
+						if (ttsStore.isSpeaking || vrmStore.isTalking) {
+							speechWaitTimer = setTimeout(returnAfterSpeech, 100);
+							return;
+						}
+
+						const fadeSeconds = 0.3;
 						action.fadeOut(fadeSeconds);
-						const stillSpeaking = ttsStore.isSpeaking || vrmStore.isTalking;
-						if (stillSpeaking && talkingAction) talkingAction.reset().fadeIn(fadeSeconds).play();
-						else if (capturedIdleAction) capturedIdleAction.fadeIn(fadeSeconds).play();
-					};
-					const playbackSeconds = clip.duration / Math.max(0.01, action.timeScale);
-					const returnTimer = setTimeout(
-						beginReturnTransition,
-						Math.max(0, (playbackSeconds - 0.8) * 1000)
-					);
-					const onFinished = (e: { action: THREE.AnimationAction }) => {
-						if (e.action === action) {
-							capturedMixer.removeEventListener('finished', onFinished);
-							clearTimeout(returnTimer);
-							beginReturnTransition();
+						const returnIdle = idleAction;
+						if (returnIdle) returnIdle.reset().fadeIn(fadeSeconds).play();
+						setTimeout(() => {
+							if (emoteAction !== action) return;
 							action.stop();
 							isEmotePlaying = false;
 							emoteAction = null;
-
-							// Clear happy expression
-							if (happyExpr) {
-								capturedVrm.expressionManager?.setValue(happyExpr, 0);
-							}
-
+							if (happyExpr) capturedVrm.expressionManager?.setValue(happyExpr, 0);
 							vrmStore.setCurrentAnimation(null);
+						}, fadeSeconds * 1000);
+					};
+					const onFinished = (e: { action: THREE.AnimationAction }) => {
+						if (e.action === action) {
+							capturedMixer.removeEventListener('finished', onFinished);
+							if (speechWaitTimer) clearTimeout(speechWaitTimer);
+							returnAfterSpeech();
 						}
 					};
 					capturedMixer.addEventListener('finished', onFinished);
