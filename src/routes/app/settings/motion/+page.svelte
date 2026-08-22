@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { vrmStore } from '$lib/stores/vrm.svelte';
+	import { goto } from '$app/navigation';
+	import { localPath } from '$lib/config/links';
 	let error = $state<string | null>(null);
 	let importing = $state(false);
 
@@ -17,6 +19,11 @@
 			importing = false;
 			input.value = '';
 		}
+	}
+
+	async function previewMotion(id: string) {
+		vrmStore.setCurrentAnimation(id);
+		await goto(localPath('app'));
 	}
 </script>
 
@@ -66,7 +73,7 @@
 				<div class="motion-row">
 					<div><strong>{motion.name}</strong><small>VRMA</small></div>
 					<div class="actions">
-						<button type="button" onclick={() => vrmStore.setCurrentAnimation(motion.id)}>Preview once</button>
+						<button type="button" onclick={() => previewMotion(motion.id)}>Preview once</button>
 						<button class="danger" type="button" onclick={() => vrmStore.removeAnimation(motion.id)}>Remove</button>
 					</div>
 				</div>

@@ -624,8 +624,8 @@
 	// Play emote animations when currentAnimation changes
 	$effect(() => {
 		const animId = currentAnimation;
-		const currentVrm = untrack(() => vrm);
-		const currentMixer = untrack(() => mixer);
+		const currentVrm = vrm;
+		const currentMixer = mixer;
 		const currentIdleAction = untrack(() => idleAction);
 
 		if (!currentVrm || !currentMixer) return;
