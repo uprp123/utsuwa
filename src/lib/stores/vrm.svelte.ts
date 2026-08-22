@@ -61,6 +61,9 @@ interface MotionBackup {
 	randomIdleMaxSeconds: number;
 	motionTransitionInSeconds?: number;
 	motionTransitionOutSeconds?: number;
+	noMotionAnimationId?: string | null;
+	noMotionLockFacing?: boolean;
+	noMotionFacingStrength?: number;
 	motionAssignments: Record<string, string>;
 	presenceSettings?: PresenceSettings;
 }
@@ -69,6 +72,7 @@ export const MOTION_SLOTS = [
 	'happy', 'wave', 'clap', 'cheer', 'surprised', 'thinking', 'sad', 'angry', 'bow', 'dance',
 	'showcase', 'greeting', 'peace', 'shoot', 'spin', 'model_pose', 'squat'
 ] as const;
+export const NO_MOTION_ASSIGNMENT = '__no_motion__';
 
 // Default models bundled with the app (first one is loaded by default).
 // See static/models/README.md for each model's license.
@@ -198,6 +202,7 @@ function createVrmStore() {
 	let currentAnimation = $state<string | null>(null);
 	let currentAnimationRevision = $state(0);
 	let currentAnimationLoop = $state(false);
+	let noMotionPlaying = $state(false);
 	let thinkingMotionActive = $state(false);
 	const defaultPresenceSettings: PresenceSettings = {
 		enterAnimationId: null, exitAnimationId: null, fadeSeconds: 1,
@@ -320,6 +325,9 @@ function createVrmStore() {
 	let randomIdleMaxSeconds = $state(20);
 	let motionTransitionInSeconds = $state(0.6);
 	let motionTransitionOutSeconds = $state(0.6);
+	let noMotionAnimationId = $state<string | null>(null);
+	let noMotionLockFacing = $state(true);
+	let noMotionFacingStrength = $state(1);
 	const sanitizeMotionTransition = (value: unknown, fallback = 0.6) => {
 		const parsed = Number(value);
 		return Number.isFinite(parsed) ? Math.max(0.05, Math.min(10, parsed)) : fallback;
@@ -376,6 +384,9 @@ function createVrmStore() {
 			randomIdleMaxSeconds = (await motionStorage?.getItem<number>('random-idle-max-seconds')) ?? 20;
 			motionTransitionInSeconds = sanitizeMotionTransition(await motionStorage?.getItem<number>('motion-transition-in-seconds'));
 			motionTransitionOutSeconds = sanitizeMotionTransition(await motionStorage?.getItem<number>('motion-transition-out-seconds'));
+			noMotionAnimationId = (await motionStorage?.getItem<string>('no-motion-animation-id')) ?? null;
+			noMotionLockFacing = (await motionStorage?.getItem<boolean>('no-motion-lock-facing')) ?? true;
+			noMotionFacingStrength = sanitizeFacingStrength(await motionStorage?.getItem<number>('no-motion-facing-strength'));
 			applyAnimationAssignments();
 		} catch (e) {
 			console.error('Failed to restore custom animations:', e);
@@ -463,6 +474,9 @@ function createVrmStore() {
 			randomIdleMaxSeconds,
 			motionTransitionInSeconds,
 			motionTransitionOutSeconds,
+			noMotionAnimationId,
+			noMotionLockFacing,
+			noMotionFacingStrength,
 			motionAssignments: { ...motionAssignments },
 			presenceSettings: { ...presenceSettings }
 		};
@@ -518,9 +532,12 @@ function createVrmStore() {
 		randomIdleMaxSeconds = Math.max(randomIdleMinSeconds, Number(backup.randomIdleMaxSeconds) || 20);
 		motionTransitionInSeconds = sanitizeMotionTransition(backup.motionTransitionInSeconds);
 		motionTransitionOutSeconds = sanitizeMotionTransition(backup.motionTransitionOutSeconds);
+		noMotionAnimationId = validId(backup.noMotionAnimationId) ? backup.noMotionAnimationId : null;
+		noMotionLockFacing = backup.noMotionLockFacing === undefined ? true : Boolean(backup.noMotionLockFacing);
+		noMotionFacingStrength = sanitizeFacingStrength(backup.noMotionFacingStrength);
 		motionAssignments = Object.fromEntries(
 			Object.entries(backup.motionAssignments ?? {}).filter(
-				([slot, animationId]) => (MOTION_SLOTS as readonly string[]).includes(slot) && validId(animationId)
+				([slot, animationId]) => (MOTION_SLOTS as readonly string[]).includes(slot) && (validId(animationId) || animationId === NO_MOTION_ASSIGNMENT)
 			)
 		);
 		if (backup.presenceSettings) updatePresenceSettings({
@@ -540,6 +557,10 @@ function createVrmStore() {
 		await motionStorage?.setItem('random-idle-max-seconds', randomIdleMaxSeconds);
 		await motionStorage?.setItem('motion-transition-in-seconds', motionTransitionInSeconds);
 		await motionStorage?.setItem('motion-transition-out-seconds', motionTransitionOutSeconds);
+		if (noMotionAnimationId) await motionStorage?.setItem('no-motion-animation-id', noMotionAnimationId);
+		else await motionStorage?.removeItem('no-motion-animation-id');
+		await motionStorage?.setItem('no-motion-lock-facing', noMotionLockFacing);
+		await motionStorage?.setItem('no-motion-facing-strength', noMotionFacingStrength);
 		await motionStorage?.setItem('motion-assignments', motionAssignments);
 		applyAnimationAssignments();
 		return restored.length;
@@ -554,6 +575,7 @@ function createVrmStore() {
 		availableAnimations = [...builtInAnimations, ...customAnimations];
 		if (activeIdleAnimationId === id) activeIdleAnimationId = null;
 		if (activeTalkingAnimationId === id) activeTalkingAnimationId = null;
+		if (noMotionAnimationId === id) noMotionAnimationId = null;
 		randomIdleAnimationIds = randomIdleAnimationIds.filter((animationId) => animationId !== id);
 		motionAssignments = Object.fromEntries(
 			Object.entries(motionAssignments).filter(([, animationId]) => animationId !== id)
@@ -570,6 +592,7 @@ function createVrmStore() {
 		await motionStorage?.setItem('active-talking-animation-id', activeTalkingAnimationId);
 		await motionStorage?.setItem('random-idle-animation-ids', randomIdleAnimationIds);
 		await motionStorage?.setItem('motion-assignments', motionAssignments);
+		if (!noMotionAnimationId) await motionStorage?.removeItem('no-motion-animation-id');
 		applyAnimationAssignments();
 	}
 
@@ -622,6 +645,16 @@ function createVrmStore() {
 		await motionStorage?.setItem('motion-transition-out-seconds', motionTransitionOutSeconds);
 	}
 
+	async function setNoMotionSettings(animationId: string | null, lockFacing: boolean, facingStrength: number): Promise<void> {
+		noMotionAnimationId = animationId && availableAnimations.some((animation) => animation.id === animationId) ? animationId : null;
+		noMotionLockFacing = Boolean(lockFacing);
+		noMotionFacingStrength = sanitizeFacingStrength(facingStrength);
+		if (noMotionAnimationId) await motionStorage?.setItem('no-motion-animation-id', noMotionAnimationId);
+		else await motionStorage?.removeItem('no-motion-animation-id');
+		await motionStorage?.setItem('no-motion-lock-facing', noMotionLockFacing);
+		await motionStorage?.setItem('no-motion-facing-strength', noMotionFacingStrength);
+	}
+
 	async function setMotionAssignment(slot: string, animationId: string | null): Promise<void> {
 		if (animationId) motionAssignments = { ...motionAssignments, [slot]: animationId };
 		else {
@@ -634,14 +667,32 @@ function createVrmStore() {
 
 	function playMappedMotion(slot: string): boolean {
 		const animationId = motionAssignments[String(slot).trim().toLowerCase()];
+		if (animationId === NO_MOTION_ASSIGNMENT) return playNoMotion();
 		if (!animationId || !availableAnimations.some((animation) => animation.id === animationId)) return false;
 		setCurrentAnimation(animationId);
+		return true;
+	}
+
+	function playNoMotion(): boolean {
+		if (!noMotionAnimationId || !availableAnimations.some((animation) => animation.id === noMotionAnimationId)) {
+			setCurrentAnimation(null);
+			noMotionPlaying = true;
+			return false;
+		}
+		setCurrentAnimation(noMotionAnimationId);
+		noMotionPlaying = true;
 		return true;
 	}
 
 	function startThinkingMotion(): boolean {
 		if (presenceState !== 'present' || thinkingMotionActive) return false;
 		const animationId = motionAssignments.thinking;
+		if (animationId === NO_MOTION_ASSIGNMENT) {
+			const played = playNoMotion();
+			thinkingMotionActive = played;
+			if (played) markPresenceActivity();
+			return played;
+		}
 		if (!animationId || !availableAnimations.some((animation) => animation.id === animationId)) return false;
 		thinkingMotionActive = true;
 		markPresenceActivity();
@@ -876,6 +927,7 @@ function createVrmStore() {
 	}
 
 	function setCurrentAnimation(animationIdOrPath: string | null, loopOverride?: boolean) {
+		noMotionPlaying = false;
 		// Accept either an animation ID or a direct path
 		// If it's a path (starts with /), use it directly
 		// Otherwise, look up the animation by ID
@@ -1056,6 +1108,10 @@ function createVrmStore() {
 		get currentAnimationLoop() { return currentAnimationLoop; },
 		get currentAnimationLocksFacing() { return Boolean(customAnimations.find((animation) => animation.url === currentAnimation)?.lockFacing); },
 		get currentAnimationFacingStrength() { return sanitizeFacingStrength(customAnimations.find((animation) => animation.url === currentAnimation)?.facingStrength); },
+		get noMotionPlaying() { return noMotionPlaying; },
+		get noMotionAnimationId() { return noMotionAnimationId; },
+		get noMotionLockFacing() { return noMotionLockFacing; },
+		get noMotionFacingStrength() { return noMotionFacingStrength; },
 		get thinkingMotionActive() { return thinkingMotionActive; },
 		startThinkingMotion,
 		stopThinkingMotion,
@@ -1085,6 +1141,7 @@ function createVrmStore() {
 		get motionTransitionInSeconds() { return motionTransitionInSeconds; },
 		get motionTransitionOutSeconds() { return motionTransitionOutSeconds; },
 		setMotionTransition,
+		setNoMotionSettings,
 		get motionAssignments() {
 			return motionAssignments;
 		},
@@ -1148,6 +1205,7 @@ function createVrmStore() {
 		setRandomIdleInterval,
 		setMotionAssignment,
 		playMappedMotion,
+		playNoMotion,
 		addModel,
 		removeModel,
 		getActiveModel,

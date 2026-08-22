@@ -35,7 +35,7 @@ export async function deliverPuppetSpeech(
 	chatStore.addMessage('assistant', text);
 	vrmStore.startTalking(text);
 	if (emotion) vrmStore.flashExpression(emotion, 0.75, 3500);
-	if (motion && motion !== 'neutral') vrmStore.playMappedMotion(motion);
+	if (!motion || motion === 'neutral' || !vrmStore.playMappedMotion(motion)) vrmStore.playNoMotion();
 
 	const speechState = modulesStore.getModuleState('speech');
 	const speechSettings = modulesStore.getModuleSettings('speech');

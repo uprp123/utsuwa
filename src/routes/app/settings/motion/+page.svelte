@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { MOTION_SLOTS, vrmStore } from '$lib/stores/vrm.svelte';
+	import { MOTION_SLOTS, NO_MOTION_ASSIGNMENT, vrmStore } from '$lib/stores/vrm.svelte';
 	import { goto } from '$app/navigation';
 	import { localPath } from '$lib/config/links';
 	let error = $state<string | null>(null);
@@ -125,6 +125,25 @@
 		</label>
 	</section>
 
+	<section class="section no-motion-settings">
+		<h3>モーション指定なしの動作</h3>
+		<p>AI回答にモーション指定がない場合と、割り当てで「モーション指定なしの動作」を選んだ場合に使用します。</p>
+		<label class="no-motion-select">
+			<span>使用するモーション</span>
+			<select value={vrmStore.noMotionAnimationId ?? ''} onchange={(e) => vrmStore.setNoMotionSettings(e.currentTarget.value || null, vrmStore.noMotionLockFacing, vrmStore.noMotionFacingStrength)}>
+				<option value="">待機／会話モーションのまま</option>
+				{#each vrmStore.availableAnimations as motion}<option value={motion.id}>{motion.name}</option>{/each}
+			</select>
+		</label>
+		<div class="no-motion-facing">
+			<label class="facing-check"><input type="checkbox" checked={vrmStore.noMotionLockFacing} onchange={(e) => vrmStore.setNoMotionSettings(vrmStore.noMotionAnimationId, e.currentTarget.checked, vrmStore.noMotionFacingStrength)} />正面向きを維持</label>
+			<label class="facing-strength" class:disabled={!vrmStore.noMotionLockFacing}>
+				<span>補正の強さ {Math.round(vrmStore.noMotionFacingStrength * 100)}%</span>
+				<input type="range" min="0" max="100" step="5" value={vrmStore.noMotionFacingStrength * 100} disabled={!vrmStore.noMotionLockFacing} oninput={(e) => vrmStore.setNoMotionSettings(vrmStore.noMotionAnimationId, vrmStore.noMotionLockFacing, Number(e.currentTarget.value) / 100)} />
+			</label>
+		</div>
+	</section>
+
 	<section class="section transition-settings">
 		<h3>モーション切り替え時間</h3>
 		<p>待機姿勢と指定モーションの間を、何秒かけて滑らかに切り替えるかを設定します。</p>
@@ -164,7 +183,8 @@
 			<label>
 				<span>{motionSlotLabels[slot] ?? slot}</span>
 				<select value={vrmStore.motionAssignments[slot] ?? ''} onchange={(e) => vrmStore.setMotionAssignment(slot, e.currentTarget.value || null)}>
-					<option value="">モーションなし</option>
+					<option value="">割り当てなし</option>
+					<option value={NO_MOTION_ASSIGNMENT}>モーション指定なしの動作</option>
 					{#each vrmStore.availableAnimations as motion}<option value={motion.id}>{motion.name}</option>{/each}
 				</select>
 			</label>
@@ -207,6 +227,10 @@
 		align-items: center;
 	}
 	.motion-options { display: grid; gap: .45rem; }
+	.no-motion-settings { display: grid; gap: .75rem; }
+	.no-motion-select { display: grid; grid-template-columns: 180px minmax(220px, 1fr); align-items: center; gap: 1rem; font-weight: 600; }
+	.no-motion-select select { padding: .7rem; border: 1px solid var(--border-light); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text-primary); }
+	.no-motion-facing { display: grid; grid-template-columns: 180px minmax(250px, 1fr); align-items: center; gap: 1rem; padding: .7rem; background: var(--bg-secondary); border-radius: var(--radius-md); }
 	.facing-check { display: flex; align-items: center; gap: .5rem; font-weight: 600; }
 	.facing-strength { display: grid; grid-template-columns: 115px minmax(110px, 1fr); align-items: center; gap: .65rem; font-size: .82rem; }
 	.facing-strength.disabled { opacity: .45; }
@@ -214,5 +238,6 @@
 	.hint { margin-top: .85rem !important; }
 	@media (max-width: 760px) {
 		.motion-row { grid-template-columns: 1fr; align-items: stretch; }
+		.no-motion-select, .no-motion-facing { grid-template-columns: 1fr; }
 	}
 </style>

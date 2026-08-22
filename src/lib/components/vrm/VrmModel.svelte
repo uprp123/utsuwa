@@ -1027,11 +1027,16 @@
 		// Update animation mixer
 		mixer?.update(delta);
 
-		// Imported Mixamo motions can rotate the hips/root away from the camera.
-		// Correct only the configured share of yaw; keep all other motion intact.
-		if (facingHips && vrmStore.currentAnimationLocksFacing) {
+		// Keep normal idle/talking poses facing the camera. Imported one-shot
+		// motions opt into this correction individually so intentional turns and
+		// spins remain available.
+		const usesNoMotionFacing = currentAnimation === null || vrmStore.noMotionPlaying;
+		const facingCorrection = usesNoMotionFacing
+			? (vrmStore.noMotionLockFacing ? vrmStore.noMotionFacingStrength : 0)
+			: (vrmStore.currentAnimationLocksFacing ? vrmStore.currentAnimationFacingStrength : 0);
+		if (facingHips && facingCorrection > 0) {
 			facingEuler.setFromQuaternion(facingHips.quaternion, 'YXZ');
-			facingEuler.y += wrapAngle(facingBaseYaw - facingEuler.y) * vrmStore.currentAnimationFacingStrength;
+			facingEuler.y += wrapAngle(facingBaseYaw - facingEuler.y) * facingCorrection;
 			facingHips.quaternion.setFromEuler(facingEuler);
 		}
 
