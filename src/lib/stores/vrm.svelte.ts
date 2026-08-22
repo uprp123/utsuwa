@@ -19,6 +19,7 @@ export interface CustomAnimation {
 	name: string;
 	url: string;
 	createdAt: number;
+	loop?: boolean;
 }
 
 interface MotionBackupAnimation {
@@ -26,6 +27,7 @@ interface MotionBackupAnimation {
 	name: string;
 	createdAt: number;
 	data: string;
+	loop?: boolean;
 }
 
 interface MotionBackup {
@@ -36,6 +38,8 @@ interface MotionBackup {
 	activeIdleAnimationId: string | null;
 	activeTalkingAnimationId: string | null;
 	randomIdleAnimationIds: string[];
+	randomIdleMinSeconds: number;
+	randomIdleMaxSeconds: number;
 	motionAssignments: Record<string, string>;
 }
 
@@ -156,6 +160,7 @@ function createVrmStore() {
 	// Animation state
 	let currentAnimation = $state<string | null>(null);
 	let currentAnimationRevision = $state(0);
+	let currentAnimationLoop = $state(false);
 
 	// Talking animation state (triggered by text output)
 	let isTalking = $state(false);
@@ -193,6 +198,8 @@ function createVrmStore() {
 	let activeTalkingAnimationId = $state<string | null>(null);
 	let randomIdleAnimationIds = $state<string[]>([]);
 	let randomIdleAnimationRevision = $state(0);
+	let randomIdleMinSeconds = $state(10);
+	let randomIdleMaxSeconds = $state(20);
 	let motionAssignments = $state<Record<string, string>>({});
 
 	// Selectable one-shot emotes (played via the developer tools). These are the
@@ -237,6 +244,8 @@ function createVrmStore() {
 				(await motionStorage?.getItem<string[]>('random-idle-animation-ids')) ?? [];
 			motionAssignments = { ...defaultMotionAssignments,
 				...((await motionStorage?.getItem<Record<string, string>>('motion-assignments')) ?? {}) };
+			randomIdleMinSeconds = (await motionStorage?.getItem<number>('random-idle-min-seconds')) ?? 10;
+			randomIdleMaxSeconds = (await motionStorage?.getItem<number>('random-idle-max-seconds')) ?? 20;
 			applyAnimationAssignments();
 		} catch (e) {
 			console.error('Failed to restore custom animations:', e);
@@ -258,7 +267,7 @@ function createVrmStore() {
 	async function saveAnimationList() {
 		await motionStorage?.setItem(
 			'animation-list',
-			customAnimations.map(({ id, name, createdAt }) => ({ id, name, createdAt }))
+			customAnimations.map(({ id, name, createdAt, loop }) => ({ id, name, createdAt, loop: Boolean(loop) }))
 		);
 	}
 
@@ -272,6 +281,7 @@ function createVrmStore() {
 			name: file.name.replace(/\.vrma$/i, ''),
 			url: URL.createObjectURL(blob),
 			createdAt: Date.now()
+			, loop: false
 		};
 		customAnimations = [...customAnimations, animation];
 		availableAnimations = [...builtInAnimations, ...customAnimations];
@@ -305,6 +315,7 @@ function createVrmStore() {
 				id: animation.id,
 				name: animation.name,
 				createdAt: animation.createdAt,
+				loop: Boolean(animation.loop),
 				data: await blobToDataUrl(stored)
 			});
 		}
@@ -316,6 +327,8 @@ function createVrmStore() {
 			activeIdleAnimationId,
 			activeTalkingAnimationId,
 			randomIdleAnimationIds: [...randomIdleAnimationIds],
+			randomIdleMinSeconds,
+			randomIdleMaxSeconds,
 			motionAssignments: { ...motionAssignments }
 		};
 		return new Blob([JSON.stringify(backup)], { type: 'application/json' });
@@ -346,7 +359,7 @@ function createVrmStore() {
 			if (!id || seen.has(id)) throw new Error('Motion backup contains duplicate motion IDs');
 			seen.add(id);
 			restored.push({
-				metadata: { id, name: item.name.trim() || 'Imported motion', createdAt: Number(item.createdAt) || Date.now() },
+				metadata: { id, name: item.name.trim() || 'Imported motion', createdAt: Number(item.createdAt) || Date.now(), loop: Boolean((item as MotionBackupAnimation & { loop?: boolean }).loop) },
 				blob: dataUrlToBlob(item.data)
 			});
 		}
@@ -366,6 +379,8 @@ function createVrmStore() {
 		randomIdleAnimationIds = Array.isArray(backup.randomIdleAnimationIds)
 			? [...new Set(backup.randomIdleAnimationIds.filter(validId))]
 			: [];
+		randomIdleMinSeconds = Math.max(1, Number(backup.randomIdleMinSeconds) || 10);
+		randomIdleMaxSeconds = Math.max(randomIdleMinSeconds, Number(backup.randomIdleMaxSeconds) || 20);
 		motionAssignments = Object.fromEntries(
 			Object.entries(backup.motionAssignments ?? {}).filter(
 				([slot, animationId]) => (MOTION_SLOTS as readonly string[]).includes(slot) && validId(animationId)
@@ -377,6 +392,8 @@ function createVrmStore() {
 		if (activeTalkingAnimationId) await motionStorage?.setItem('active-talking-animation-id', activeTalkingAnimationId);
 		else await motionStorage?.removeItem('active-talking-animation-id');
 		await motionStorage?.setItem('random-idle-animation-ids', randomIdleAnimationIds);
+		await motionStorage?.setItem('random-idle-min-seconds', randomIdleMinSeconds);
+		await motionStorage?.setItem('random-idle-max-seconds', randomIdleMaxSeconds);
 		await motionStorage?.setItem('motion-assignments', motionAssignments);
 		applyAnimationAssignments();
 		return restored.length;
@@ -423,6 +440,20 @@ function createVrmStore() {
 			: randomIdleAnimationIds.filter((animationId) => animationId !== id);
 		await motionStorage?.setItem('random-idle-animation-ids', randomIdleAnimationIds);
 		applyAnimationAssignments();
+	}
+
+	async function setAnimationLoop(id: string, loop: boolean): Promise<void> {
+		customAnimations = customAnimations.map((animation) => animation.id === id ? { ...animation, loop } : animation);
+		availableAnimations = [...builtInAnimations, ...customAnimations];
+		await saveAnimationList();
+	}
+
+	async function setRandomIdleInterval(minSeconds: number, maxSeconds: number): Promise<void> {
+		randomIdleMinSeconds = Math.max(1, Number(minSeconds) || 10);
+		randomIdleMaxSeconds = Math.max(randomIdleMinSeconds, Number(maxSeconds) || randomIdleMinSeconds);
+		await motionStorage?.setItem('random-idle-min-seconds', randomIdleMinSeconds);
+		await motionStorage?.setItem('random-idle-max-seconds', randomIdleMaxSeconds);
+		randomIdleAnimationRevision += 1;
 	}
 
 	async function setMotionAssignment(slot: string, animationId: string | null): Promise<void> {
@@ -658,7 +689,7 @@ function createVrmStore() {
 		headScreenPosition = pos;
 	}
 
-	function setCurrentAnimation(animationIdOrPath: string | null) {
+	function setCurrentAnimation(animationIdOrPath: string | null, loopOverride?: boolean) {
 		// Accept either an animation ID or a direct path
 		// If it's a path (starts with /), use it directly
 		// Otherwise, look up the animation by ID
@@ -667,11 +698,14 @@ function createVrmStore() {
 		} else if (animationIdOrPath.startsWith('/')) {
 			// Direct path - use as-is
 			currentAnimation = animationIdOrPath;
+			currentAnimationLoop = loopOverride ?? false;
 		} else {
 			// Look up by ID in availableAnimations
 			const anim = availableAnimations.find((a) => a.id === animationIdOrPath);
 			currentAnimation = anim?.url || null;
+			currentAnimationLoop = loopOverride ?? Boolean((anim as CustomAnimation | undefined)?.loop);
 		}
+		if (!currentAnimation) currentAnimationLoop = false;
 		currentAnimationRevision += 1;
 	}
 
@@ -836,6 +870,7 @@ function createVrmStore() {
 			return availableAnimations;
 		},
 		get currentAnimationRevision() { return currentAnimationRevision; },
+		get currentAnimationLoop() { return currentAnimationLoop; },
 		get customAnimations() {
 			return customAnimations;
 		},
@@ -849,6 +884,8 @@ function createVrmStore() {
 			return randomIdleAnimationIds;
 		},
 		get randomIdleAnimationRevision() { return randomIdleAnimationRevision; },
+		get randomIdleMinSeconds() { return randomIdleMinSeconds; },
+		get randomIdleMaxSeconds() { return randomIdleMaxSeconds; },
 		get motionAssignments() {
 			return motionAssignments;
 		},
@@ -907,6 +944,8 @@ function createVrmStore() {
 		setIdleAnimation,
 		setTalkingAnimation,
 		setRandomIdleAnimation,
+		setAnimationLoop,
+		setRandomIdleInterval,
 		setMotionAssignment,
 		playMappedMotion,
 		addModel,

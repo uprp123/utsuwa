@@ -236,11 +236,13 @@
 
 	function scheduleRandomIdleMotion() {
 		if (randomIdleTimeout) clearTimeout(randomIdleTimeout);
-		const delay = (10 + Math.random() * 10) * 1000;
+		const min = vrmStore.randomIdleMinSeconds;
+		const max = Math.max(min, vrmStore.randomIdleMaxSeconds);
+		const delay = (min + Math.random() * (max - min)) * 1000;
 		randomIdleTimeout = setTimeout(() => {
 			const ids = vrmStore.randomIdleAnimationIds;
 			if (ids.length && !shouldTalk && !isEmotePlaying && !photomodeStore.active) {
-				vrmStore.setCurrentAnimation(ids[Math.floor(Math.random() * ids.length)]);
+				vrmStore.setCurrentAnimation(ids[Math.floor(Math.random() * ids.length)], false);
 			}
 			scheduleRandomIdleMotion();
 		}, delay);
@@ -263,6 +265,8 @@
 				const clip = createVRMAnimationClip(vrmAnimation, targetVrm);
 				const action = targetMixer.clipAction(clip);
 				action.setLoop(THREE.LoopRepeat, Infinity);
+				action.enabled = true;
+				action.paused = false;
 				action.play();
 				// A model that finishes loading while photo mode is already open
 				// holds its stance instead of idling through the shot
@@ -317,6 +321,8 @@
 				const clip = createVRMAnimationClip(vrmAnimation, targetVrm);
 				const action = targetMixer.clipAction(clip);
 				action.setLoop(THREE.LoopRepeat, Infinity);
+				action.enabled = true;
+				action.paused = false;
 				action.reset().fadeIn(1.2).play();
 				idleAction = action;
 
@@ -644,6 +650,7 @@
 	$effect(() => {
 		vrmStore.currentAnimationRevision;
 		const animId = currentAnimation;
+		const shouldLoopMotion = vrmStore.currentAnimationLoop;
 		const currentVrm = vrm;
 		const currentMixer = mixer;
 		const currentIdleAction = untrack(() => idleAction);
@@ -689,10 +696,10 @@
 					// Create and play emote
 					const clip = createVRMAnimationClip(vrmAnimation, vrm);
 					const action = mixer.clipAction(clip);
-					action.setLoop(THREE.LoopOnce, 1);
-					action.clampWhenFinished = true;
+					action.setLoop(shouldLoopMotion ? THREE.LoopRepeat : THREE.LoopOnce, shouldLoopMotion ? Infinity : 1);
+					action.clampWhenFinished = !shouldLoopMotion;
 					action.timeScale = 1;
-					action.reset().fadeIn(0.2).play();
+					action.reset().fadeIn(0.6).play();
 					emoteAction = action;
 					isEmotePlaying = true;
 
@@ -718,7 +725,11 @@
 						action.fadeOut(fadeSeconds);
 						if (talkingAction) talkingAction.fadeOut(fadeSeconds);
 						const returnIdle = idleAction;
-						if (returnIdle) returnIdle.reset().fadeIn(fadeSeconds).play();
+						if (returnIdle) {
+							returnIdle.enabled = true;
+							returnIdle.paused = false;
+							returnIdle.reset().fadeIn(fadeSeconds).play();
+						}
 						setTimeout(() => {
 							if (emoteAction !== action) return;
 							action.stop();
@@ -744,7 +755,8 @@
 					capturedMixer.addEventListener('finished', onFinished);
 					// Some converted VRMA clips don't emit Three.js's finished event.
 					// Use the actual clip duration as a bounded one-shot fallback.
-					setTimeout(motionFinished, Math.min(30, Math.max(0.1, clip.duration)) * 1000 + 100);
+					if (!shouldLoopMotion) setTimeout(motionFinished, Math.min(30, Math.max(0.1, clip.duration)) * 1000 + 100);
+					else returnAfterSpeech();
 				});
 			})
 			.catch((error) => {

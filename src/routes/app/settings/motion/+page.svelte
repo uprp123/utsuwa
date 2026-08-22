@@ -127,6 +127,10 @@
 
 	<section class="section random-idles">
 		<h3>ランダム待機モーション</h3><p>選択したモーションを待機中のローテーションへ追加します。</p>
+		<div class="interval-settings">
+			<label>最短（秒）<input type="number" min="1" value={vrmStore.randomIdleMinSeconds} onchange={(e) => vrmStore.setRandomIdleInterval(Number(e.currentTarget.value), vrmStore.randomIdleMaxSeconds)} /></label>
+			<label>最長（秒）<input type="number" min="1" value={vrmStore.randomIdleMaxSeconds} onchange={(e) => vrmStore.setRandomIdleInterval(vrmStore.randomIdleMinSeconds, Number(e.currentTarget.value))} /></label>
+		</div>
 		{#if vrmStore.customAnimations.length === 0}
 			<p class="empty">Import VRMA files to add random idle motions.</p>
 		{:else}
@@ -167,6 +171,7 @@
 				<div class="motion-row">
 					<div><strong>{motion.name}</strong><small>VRMA</small></div>
 					<div class="actions">
+						<label class="loop-check"><input type="checkbox" checked={Boolean(motion.loop)} onchange={(e) => vrmStore.setAnimationLoop(motion.id, e.currentTarget.checked)} />会話中ループ</label>
 						<button type="button" onclick={() => previewMotion(motion.id)}>1回プレビュー</button>
 						<button class="danger" type="button" onclick={() => vrmStore.removeAnimation(motion.id)}>削除</button>
 					</div>
