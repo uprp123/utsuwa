@@ -2,7 +2,7 @@ import { browser } from '$app/environment';
 
 export type PuppetStatus = 'disabled' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 
-export interface PuppetMessage {
+export interface PuppetChatMessage {
 	type: 'chat';
 	text: string;
 	name?: string;
@@ -10,6 +10,12 @@ export interface PuppetMessage {
 	motion?: string;
 	message_id?: string;
 }
+export interface PuppetControlMessage {
+	type: 'character_control';
+	action: 'enter' | 'exit' | 'thinking_start' | 'thinking_stop';
+	message_id?: string;
+}
+export type PuppetMessage = PuppetChatMessage | PuppetControlMessage;
 
 interface PuppetSettings {
 	enabled: boolean;
@@ -100,6 +106,13 @@ function createPuppetStore() {
 						listener?.({
 							type: 'chat', text: parsed.text, name: parsed.name,
 							emotion: parsed.emotion, motion: parsed.motion, message_id: parsed.message_id
+						});
+					} else if (parsed.type === 'character_control' &&
+						['enter', 'exit', 'thinking_start', 'thinking_stop'].includes(String(parsed.action))) {
+						listener?.({
+							type: 'character_control',
+							action: parsed.action as PuppetControlMessage['action'],
+							message_id: parsed.message_id
 						});
 					}
 				} catch {

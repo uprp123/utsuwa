@@ -682,7 +682,7 @@
 
 	// Play emote animations when currentAnimation changes
 	$effect(() => {
-		vrmStore.currentAnimationRevision;
+		const animationRevision = vrmStore.currentAnimationRevision;
 		const animId = currentAnimation;
 		const shouldLoopMotion = vrmStore.currentAnimationLoop;
 		const currentVrm = vrm;
@@ -715,7 +715,7 @@
 		loadVrmAnimation(animationData.url)
 			.then((vrmAnimation) => {
 				untrack(() => {
-					if (!vrm || !mixer) return;
+					if (!vrm || !mixer || vrmStore.currentAnimationRevision !== animationRevision) return;
 
 					// Fade out idle animation
 					const currentIdle = idleAction;
@@ -999,6 +999,9 @@
 			: modelOpacity + (targetOpacity - modelOpacity) * Math.min(1, delta / fadeSeconds * 4);
 		if (Math.abs(modelOpacity - targetOpacity) < 0.002) modelOpacity = targetOpacity;
 		if (modelOpacity !== previousOpacity) applyModelOpacity(modelOpacity);
+		// Some VRM materials ignore runtime opacity changes. The root visibility is
+		// the final guarantee that a completed exit cannot leave the avatar onscreen.
+		if (group) group.visible = modelOpacity > 0.001;
 
 		// Undo last frame's tap nudges before anything writes bones this frame.
 		// When the mixer overwrites the rotation anyway this is a no-op; when it

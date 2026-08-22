@@ -91,6 +91,20 @@
 	let stopPuppet: (() => void) | null = null;
 	$effect(() => {
 		stopPuppet = puppetStore.start(async (message) => {
+			if (message.type === 'character_control') {
+				if (message.action === 'thinking_start') vrmStore.startThinkingMotion();
+				else if (message.action === 'thinking_stop') vrmStore.stopThinkingMotion();
+				else {
+					vrmStore.requestPresence(message.action);
+					const expected = message.action === 'enter' ? 'present' : 'hidden';
+					const deadline = Date.now() + 45000;
+					while (vrmStore.presenceState !== expected && Date.now() < deadline) {
+						await new Promise((resolve) => setTimeout(resolve, 100));
+					}
+				}
+				puppetStore.sendEvent('control_finished', message.message_id);
+				return;
+			}
 			try {
 				const displayed = await deliverPuppetSpeech(
 					message.text,

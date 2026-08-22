@@ -192,6 +192,7 @@ function createVrmStore() {
 	let currentAnimation = $state<string | null>(null);
 	let currentAnimationRevision = $state(0);
 	let currentAnimationLoop = $state(false);
+	let thinkingMotionActive = $state(false);
 	const defaultPresenceSettings: PresenceSettings = {
 		enterAnimationId: null, exitAnimationId: null, fadeSeconds: 1,
 		autoExitEnabled: false, autoExitMinutes: 30
@@ -263,7 +264,7 @@ function createVrmStore() {
 		}
 		const timeoutSeconds = presenceSettings.autoExitMinutes * 60;
 		autoExitSecondsRemaining = Math.max(0, Math.ceil(timeoutSeconds - (Date.now() - lastPresenceActivityAt) / 1000));
-		if (autoExitSecondsRemaining === 0 && !isTalking && !currentAnimation) requestPresence('exit');
+		if (autoExitSecondsRemaining === 0 && !isTalking && !currentAnimation && !thinkingMotionActive) requestPresence('exit');
 	}, 1000);
 
 	// Talking animation state (triggered by text output)
@@ -591,6 +592,23 @@ function createVrmStore() {
 		if (!animationId || !availableAnimations.some((animation) => animation.id === animationId)) return false;
 		setCurrentAnimation(animationId);
 		return true;
+	}
+
+	function startThinkingMotion(): boolean {
+		if (presenceState !== 'present' || thinkingMotionActive) return false;
+		const animationId = motionAssignments.thinking;
+		if (!animationId || !availableAnimations.some((animation) => animation.id === animationId)) return false;
+		thinkingMotionActive = true;
+		markPresenceActivity();
+		setCurrentAnimation(animationId, true);
+		return true;
+	}
+
+	function stopThinkingMotion() {
+		if (!thinkingMotionActive) return;
+		thinkingMotionActive = false;
+		setCurrentAnimation(null);
+		markPresenceActivity();
 	}
 
 	// Guard against saveToStorage running before init completes
@@ -991,6 +1009,9 @@ function createVrmStore() {
 		clearActiveExpression,
 		get currentAnimationRevision() { return currentAnimationRevision; },
 		get currentAnimationLoop() { return currentAnimationLoop; },
+		get thinkingMotionActive() { return thinkingMotionActive; },
+		startThinkingMotion,
+		stopThinkingMotion,
 		get presenceSettings() { return presenceSettings; },
 		get presenceState() { return presenceState; },
 		get autoExitSecondsRemaining() { return autoExitSecondsRemaining; },
