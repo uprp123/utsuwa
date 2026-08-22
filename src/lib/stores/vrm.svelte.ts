@@ -341,7 +341,9 @@ function createVrmStore() {
 	// Selectable one-shot emotes (played via the developer tools). These are the
 	// VRMA files shipped in static/animations/ that aren't part of the idle cycle
 	// or the talking loop.
-	const builtInAnimations: { id: string; name: string; url: string }[] = [
+	const builtInAnimations: Array<{ id: string; name: string; url: string; loop?: boolean }> = [
+		{ id: 'default_idle', name: 'デフォルト待機モーション', url: '/animations/idle.vrma', loop: true },
+		{ id: 'default_talking', name: 'デフォルト会話モーション', url: '/animations/talking.vrma', loop: true },
 		{ id: 'vrma_01', name: '全身を見せる', url: '/animations/VRMA_01.vrma' },
 		{ id: 'vrma_02', name: '挨拶', url: '/animations/VRMA_02.vrma' },
 		{ id: 'vrma_03', name: 'Vサイン', url: '/animations/VRMA_03.vrma' },
@@ -354,7 +356,7 @@ function createVrmStore() {
 		showcase: 'vrma_01', greeting: 'vrma_02', peace: 'vrma_03', shoot: 'vrma_04',
 		spin: 'vrma_05', model_pose: 'vrma_06', squat: 'vrma_07'
 	};
-	let availableAnimations = $state<{ id: string; name: string; url: string }[]>([
+	let availableAnimations = $state<Array<{ id: string; name: string; url: string; loop?: boolean }>>([
 		...builtInAnimations
 	]);
 
