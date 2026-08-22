@@ -21,6 +21,13 @@ export interface CustomAnimation {
 	createdAt: number;
 	loop?: boolean;
 }
+export interface ExpressionSettings {
+	strengths: Record<string, number>; happyBlink: number; fadeIn: number; fadeOut: number;
+}
+const DEFAULT_EXPRESSION_SETTINGS: ExpressionSettings = {
+	strengths: { happy: .75, sad: .75, angry: .75, surprised: .75, relaxed: .75 },
+	happyBlink: .35, fadeIn: .4, fadeOut: .6
+};
 
 interface MotionBackupAnimation {
 	id: string;
@@ -109,6 +116,21 @@ function createVrmStore() {
 
 	// Available expressions on current model (persists across navigation)
 	let availableExpressions = $state<string[]>([]);
+	let expressionSettings = $state<ExpressionSettings>(structuredClone(DEFAULT_EXPRESSION_SETTINGS));
+	let activeExpression = $state<{ name: string; value: number; startedAt: number; durationMs: number; seq: number } | null>(null);
+	let expressionSeq = 0;
+	function loadExpressionSettings(modelId = activeModelId) {
+		if (!browser || !modelId) return;
+		try {
+			const saved = JSON.parse(localStorage.getItem(`utsuwa-expression-${modelId}`) || 'null');
+			expressionSettings = { ...structuredClone(DEFAULT_EXPRESSION_SETTINGS), ...(saved || {}), strengths: { ...DEFAULT_EXPRESSION_SETTINGS.strengths, ...(saved?.strengths || {}) } };
+		} catch { expressionSettings = structuredClone(DEFAULT_EXPRESSION_SETTINGS); }
+	}
+	function updateExpressionSettings(next: ExpressionSettings) {
+		expressionSettings = next;
+		if (browser && activeModelId) localStorage.setItem(`utsuwa-expression-${activeModelId}`, JSON.stringify(next));
+	}
+	function clearActiveExpression(seq: number) { if (activeExpression?.seq === seq) activeExpression = null; }
 
 	// ── Temporary model (for Developer Tools preview) ──
 	// Kept in memory only; never persisted to storage.
@@ -571,6 +593,7 @@ function createVrmStore() {
 			activeModelId = DEFAULT_MODELS[0].id;
 			modelUrl = DEFAULT_MODELS[0].url;
 		}
+		loadExpressionSettings(activeModelId);
 		storageReady = true;
 		readyResolve?.();
 		// Flush any saves that were blocked during init
@@ -641,7 +664,8 @@ function createVrmStore() {
 	async function setActiveModel(id: string) {
 		const model = models.find((m) => m.id === id);
 		if (model) {
-			activeModelId = id;
+		activeModelId = id;
+		loadExpressionSettings(id);
 			modelUrl = model.url;
 			await saveToStorage();
 			broadcastModelChange();
@@ -663,6 +687,7 @@ function createVrmStore() {
 		const model = models.find((m) => m.id === savedActiveId);
 		if (model) {
 			activeModelId = savedActiveId;
+			loadExpressionSettings(savedActiveId);
 			modelUrl = model.url;
 		} else {
 			// New custom model added in another window — full re-init
@@ -740,16 +765,8 @@ function createVrmStore() {
 	}
 
 	function flashExpression(name: string, value = 0.75, durationMs = 3000) {
-		const manager = vrm?.expressionManager;
-		if (!manager || !availableExpressions.includes(name)) return false;
-		manager.setValue(name, value);
-		manager.update();
-		setTimeout(() => {
-			if (vrm?.expressionManager) {
-				vrm.expressionManager.setValue(name, 0);
-				vrm.expressionManager.update();
-			}
-		}, durationMs);
+		if (!vrm?.expressionManager || !availableExpressions.includes(name)) return false;
+		activeExpression = { name, value, startedAt: performance.now(), durationMs, seq: ++expressionSeq };
 		return true;
 	}
 
@@ -869,6 +886,10 @@ function createVrmStore() {
 		get availableAnimations() {
 			return availableAnimations;
 		},
+		get expressionSettings() { return expressionSettings; },
+		get activeExpression() { return activeExpression; },
+		updateExpressionSettings,
+		clearActiveExpression,
 		get currentAnimationRevision() { return currentAnimationRevision; },
 		get currentAnimationLoop() { return currentAnimationLoop; },
 		get customAnimations() {

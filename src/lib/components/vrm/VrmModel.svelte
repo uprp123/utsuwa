@@ -115,6 +115,7 @@
 	let talkingAction = $state<THREE.AnimationAction | null>(null); // Looping talking animation
 	let talkingClip = $state<THREE.AnimationClip | null>(null); // Cached talking clip
 	let emoteAction = $state<THREE.AnimationAction | null>(null); // One-shot emote animations
+	let lastConfiguredExpression: string | null = null;
 	let isEmotePlaying = $state(false); // True when an emote is playing (disables blinking)
 	let lastIdleIndex = $state(-1); // Track last played idle to avoid repeats
 	const currentAnimation = $derived(vrmStore.currentAnimation);
@@ -703,12 +704,6 @@
 					emoteAction = action;
 					isEmotePlaying = true;
 
-					// Apply happy expression during emote
-					const happyExpr = findHappyExpression(vrm);
-					if (happyExpr) {
-						vrm.expressionManager?.setValue(happyExpr, 0.7);
-					}
-
 					// Play the mapped motion exactly once. Keep its final pose while speech
 					// continues, then use the same short crossfade as the No motion path.
 					const capturedMixer = mixer;
@@ -735,7 +730,6 @@
 							action.stop();
 							isEmotePlaying = false;
 							emoteAction = null;
-							if (happyExpr) capturedVrm.expressionManager?.setValue(happyExpr, 0);
 							vrmStore.setCurrentAnimation(null);
 						}, fadeSeconds * 1000);
 					};
@@ -1205,6 +1199,31 @@
 		} else {
 			const jawOpen = findExpression('jawOpen');
 			if (jawOpen) setExpression(jawOpen, Math.min(visemes.aa, 0.35));
+		}
+
+		// Model-specific expression envelope configured in Settings > Expressions.
+		const request = vrmStore.activeExpression;
+		if (request) {
+			const settings = vrmStore.expressionSettings;
+			const elapsed = Math.max(0, performance.now() - request.startedAt) / 1000;
+			const total = request.durationMs / 1000;
+			const fadeIn = Math.max(.01, settings.fadeIn);
+			const fadeOut = Math.max(.01, settings.fadeOut);
+			let envelope = Math.min(1, elapsed / fadeIn);
+			if (elapsed > total - fadeOut) envelope = Math.min(envelope, Math.max(0, (total - elapsed) / fadeOut));
+			if (lastConfiguredExpression && lastConfiguredExpression !== request.name) setExpression(lastConfiguredExpression, 0);
+			lastConfiguredExpression = request.name;
+			setExpression(request.name, (settings.strengths[request.name] ?? request.value) * envelope);
+			if (request.name === 'happy' && settings.happyBlink > 0) {
+				for (const blinkName of ['blink', 'Blink', 'blinkLeft', 'blinkRight', 'eyeBlinkLeft', 'eyeBlinkRight']) {
+					setExpression(blinkName, settings.happyBlink * envelope);
+				}
+			}
+			if (elapsed >= total) {
+				setExpression(request.name, 0);
+				for (const blinkName of ['blink', 'Blink', 'blinkLeft', 'blinkRight', 'eyeBlinkLeft', 'eyeBlinkRight']) setExpression(blinkName, 0);
+				vrmStore.clearActiveExpression(request.seq);
+			}
 		}
 
 		// Commit blinking, emotion and lip-sync together after all values are set.

@@ -13,6 +13,7 @@
 		{ href: localPath('app', '/settings/stt'), label: 'STT', icon: 'mic' },
 		{ href: localPath('app', '/settings/puppet'), label: 'AICommentViewer', icon: 'code' },
 		{ href: localPath('app', '/settings/motion'), label: 'Motion', icon: 'video' },
+		{ href: localPath('app', '/settings/expression'), label: '表情', icon: 'persona' },
 		{ href: localPath('app', '/settings/data'), label: 'Data', icon: 'database' },
 		{ href: localPath('app', '/settings/developer'), label: 'Developer', icon: 'code' }
 	]);
