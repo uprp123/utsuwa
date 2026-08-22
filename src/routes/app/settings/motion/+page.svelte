@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { vrmStore } from '$lib/stores/vrm.svelte';
+	import { MOTION_SLOTS, vrmStore } from '$lib/stores/vrm.svelte';
 	import { goto } from '$app/navigation';
 	import { localPath } from '$lib/config/links';
 	let error = $state<string | null>(null);
@@ -62,6 +62,20 @@
 				{#each vrmStore.customAnimations as motion}<option value={motion.id}>{motion.name}</option>{/each}
 			</select>
 		</label>
+	</section>
+
+	<section class="section assignments">
+		<h3>AI motion mapping</h3>
+		<p>Map motion names sent by AICommentViewer to imported VRMA files.</p>
+		{#each MOTION_SLOTS as slot}
+			<label>
+				<span>{slot}</span>
+				<select value={vrmStore.motionAssignments[slot] ?? ''} onchange={(e) => vrmStore.setMotionAssignment(slot, e.currentTarget.value || null)}>
+					<option value="">No motion</option>
+					{#each vrmStore.customAnimations as motion}<option value={motion.id}>{motion.name}</option>{/each}
+				</select>
+			</label>
+		{/each}
 	</section>
 
 	<section class="section library">

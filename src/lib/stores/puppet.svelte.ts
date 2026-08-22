@@ -6,6 +6,8 @@ export interface PuppetMessage {
 	type: 'chat';
 	text: string;
 	name?: string;
+	emotion?: string;
+	motion?: string;
 }
 
 interface PuppetSettings {
@@ -16,7 +18,7 @@ interface PuppetSettings {
 const STORAGE_KEY = 'utsuwa-aicommentviewer-puppet';
 const DEFAULT_SETTINGS: PuppetSettings = {
 	enabled: false,
-	url: 'ws://127.0.0.1:8767/ws?room=lobby&name=Utsuwa'
+	url: 'ws://127.0.0.1:8768/ws?room=lobby&name=Utsuwa'
 };
 
 function createPuppetStore() {
@@ -85,7 +87,10 @@ function createPuppetStore() {
 				try {
 					const parsed = JSON.parse(String(event.data)) as Partial<PuppetMessage>;
 					if (parsed.type === 'chat' && typeof parsed.text === 'string' && parsed.text.trim()) {
-						listener?.({ type: 'chat', text: parsed.text, name: parsed.name });
+						listener?.({
+							type: 'chat', text: parsed.text, name: parsed.name,
+							emotion: parsed.emotion, motion: parsed.motion
+						});
 					}
 				} catch {
 					lastError = 'Unsupported WebSocket message received';

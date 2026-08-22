@@ -21,13 +21,20 @@ export function parsePuppetText(input: string): { text: string; emotion?: string
 	return { text: input.slice(match[0].length).trim(), emotion };
 }
 
-export async function deliverPuppetSpeech(rawText: string): Promise<string> {
-	const { text, emotion } = parsePuppetText(rawText);
+export async function deliverPuppetSpeech(
+	rawText: string,
+	explicitEmotion?: string,
+	motion?: string
+): Promise<string> {
+	const parsed = parsePuppetText(rawText);
+	const text = parsed.text;
+	const emotion = EMOTION_ALIASES[String(explicitEmotion ?? '').toLowerCase()] ?? parsed.emotion;
 	if (!text) return '';
 
 	chatStore.addMessage('assistant', text);
 	vrmStore.startTalking(text);
 	if (emotion) vrmStore.flashExpression(emotion, 0.75, 3500);
+	if (motion && motion !== 'neutral') vrmStore.playMappedMotion(motion);
 
 	const speechState = modulesStore.getModuleState('speech');
 	const speechSettings = modulesStore.getModuleSettings('speech');

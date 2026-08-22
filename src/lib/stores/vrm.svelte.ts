@@ -21,6 +21,10 @@ export interface CustomAnimation {
 	createdAt: number;
 }
 
+export const MOTION_SLOTS = [
+	'happy', 'wave', 'clap', 'cheer', 'surprised', 'thinking', 'sad', 'angry', 'bow', 'dance'
+] as const;
+
 // Default models bundled with the app (first one is loaded by default).
 // See static/models/README.md for each model's license.
 const DEFAULT_MODELS: VrmModel[] = [
@@ -167,6 +171,7 @@ function createVrmStore() {
 	let customAnimations = $state<CustomAnimation[]>([]);
 	let activeIdleAnimationId = $state<string | null>(null);
 	let activeTalkingAnimationId = $state<string | null>(null);
+	let motionAssignments = $state<Record<string, string>>({});
 
 	// Selectable one-shot emotes (played via the developer tools). These are the
 	// VRMA files shipped in static/animations/ that aren't part of the idle cycle
@@ -202,6 +207,8 @@ function createVrmStore() {
 				(await motionStorage?.getItem<string>('active-idle-animation-id')) ?? null;
 			activeTalkingAnimationId =
 				(await motionStorage?.getItem<string>('active-talking-animation-id')) ?? null;
+			motionAssignments =
+				(await motionStorage?.getItem<Record<string, string>>('motion-assignments')) ?? {};
 			applyAnimationAssignments();
 		} catch (e) {
 			console.error('Failed to restore custom animations:', e);
@@ -249,9 +256,13 @@ function createVrmStore() {
 		availableAnimations = [...builtInAnimations, ...customAnimations];
 		if (activeIdleAnimationId === id) activeIdleAnimationId = null;
 		if (activeTalkingAnimationId === id) activeTalkingAnimationId = null;
+		motionAssignments = Object.fromEntries(
+			Object.entries(motionAssignments).filter(([, animationId]) => animationId !== id)
+		);
 		await saveAnimationList();
 		await motionStorage?.setItem('active-idle-animation-id', activeIdleAnimationId);
 		await motionStorage?.setItem('active-talking-animation-id', activeTalkingAnimationId);
+		await motionStorage?.setItem('motion-assignments', motionAssignments);
 		applyAnimationAssignments();
 	}
 
@@ -267,6 +278,23 @@ function createVrmStore() {
 		if (id) await motionStorage?.setItem('active-talking-animation-id', id);
 		else await motionStorage?.removeItem('active-talking-animation-id');
 		applyAnimationAssignments();
+	}
+
+	async function setMotionAssignment(slot: string, animationId: string | null): Promise<void> {
+		if (animationId) motionAssignments = { ...motionAssignments, [slot]: animationId };
+		else {
+			const next = { ...motionAssignments };
+			delete next[slot];
+			motionAssignments = next;
+		}
+		await motionStorage?.setItem('motion-assignments', motionAssignments);
+	}
+
+	function playMappedMotion(slot: string): boolean {
+		const animationId = motionAssignments[String(slot).trim().toLowerCase()];
+		if (!animationId || !customAnimations.some((animation) => animation.id === animationId)) return false;
+		setCurrentAnimation(animationId);
+		return true;
 	}
 
 	// Guard against saveToStorage running before init completes
@@ -670,6 +698,9 @@ function createVrmStore() {
 		get activeTalkingAnimationId() {
 			return activeTalkingAnimationId;
 		},
+		get motionAssignments() {
+			return motionAssignments;
+		},
 		get idleAnimationRevision() {
 			return idleAnimationRevision;
 		},
@@ -722,6 +753,8 @@ function createVrmStore() {
 		removeAnimation,
 		setIdleAnimation,
 		setTalkingAnimation,
+		setMotionAssignment,
+		playMappedMotion,
 		addModel,
 		removeModel,
 		getActiveModel,

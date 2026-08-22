@@ -31,7 +31,7 @@
 				<input id="puppet-url" bind:value={draftUrl} onkeydown={(e) => e.key === 'Enter' && saveUrl()} />
 				<button type="button" onclick={saveUrl}>Save & reconnect</button>
 			</div>
-			<small>Default for the current AICommentViewer setup: ws://127.0.0.1:8767/ws?room=lobby&amp;name=Utsuwa</small>
+			<small>Utsuwa dedicated endpoint: ws://127.0.0.1:8768/ws?room=lobby&amp;name=Utsuwa</small>
 		</div>
 
 		<div class="status" class:ok={puppetStore.status === 'connected'}>
