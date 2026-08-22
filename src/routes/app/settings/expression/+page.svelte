@@ -1,8 +1,16 @@
 <script lang="ts">
 	import { vrmStore, type ExpressionSettings } from '$lib/stores/vrm.svelte';
 	const names = [['happy','笑顔'],['sad','悲しい'],['angry','怒り'],['surprised','驚き'],['relaxed','リラックス']] as const;
-	let draft = $state<ExpressionSettings>(structuredClone(vrmStore.expressionSettings));
-	function save() { vrmStore.updateExpressionSettings(structuredClone(draft)); }
+	function copySettings(source: ExpressionSettings): ExpressionSettings {
+		return {
+			strengths: Object.fromEntries(Object.entries(source.strengths).map(([name, value]) => [name, Number(value)])),
+			happyBlink: Number(source.happyBlink),
+			fadeIn: Number(source.fadeIn),
+			fadeOut: Number(source.fadeOut)
+		};
+	}
+	let draft = $state<ExpressionSettings>(copySettings(vrmStore.expressionSettings));
+	function save() { vrmStore.updateExpressionSettings(copySettings(draft)); }
 	function preview(name: string) { save(); vrmStore.flashExpression(name, draft.strengths[name] ?? .75, 3500); }
 </script>
 
