@@ -150,6 +150,7 @@ export const BACKGROUND_PRESETS: BackgroundPreset[] = [
 	},
 	{ id: 'white', label: 'White', bg: { type: 'solid', value: '#ffffff' }, swatch: '#ffffff' },
 	{ id: 'black', label: 'Black', bg: { type: 'solid', value: '#0b0b0d' }, swatch: '#0b0b0d' },
+	{ id: 'green-screen', label: 'グリーンバック', bg: { type: 'solid', value: '#00ff00' }, swatch: '#00ff00' },
 	{
 		id: 'mist',
 		label: 'Mist',
