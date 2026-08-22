@@ -117,6 +117,7 @@
 	let emoteAction = $state<THREE.AnimationAction | null>(null); // One-shot emote animations
 	let lastConfiguredExpression: string | null = null;
 	let happyBlinkOverride: { expression: VRMExpression; value: VRMExpression['overrideBlink'] } | null = null;
+	let happyBlinkApplied = false;
 	function restoreHappyBlinkOverride() {
 		if (!happyBlinkOverride) return;
 		happyBlinkOverride.expression.overrideBlink = happyBlinkOverride.value;
@@ -958,6 +959,7 @@
 	// Update VRM each frame
 	useTask((delta) => {
 		if (!vrm) return;
+		let reactionHappyEnvelope = 0;
 
 		// Undo last frame's tap nudges before anything writes bones this frame.
 		// When the mixer overwrites the rotation anyway this is a no-op; when it
@@ -1027,7 +1029,10 @@
 				// Quick attack, long release
 				const shape =
 					progress < 0.3 ? progress / 0.3 : 1 - Math.max(0, (progress - 0.5) / 0.5);
-				em.setValue(reactionFace.name, Math.max(0, Math.min(1, reactionFace.weight * shape)));
+				const configuredStrength = vrmStore.expressionSettings.strengths[reactionFace.name] ?? .75;
+				const weight = Math.max(0, Math.min(1, reactionFace.weight * (configuredStrength / .75) * shape));
+				em.setValue(reactionFace.name, weight);
+				if (reactionFace.name.toLowerCase() === 'happy') reactionHappyEnvelope = shape;
 			}
 		}
 
@@ -1209,6 +1214,7 @@
 
 		// Model-specific expression envelope configured in Settings > Expressions.
 		const request = vrmStore.activeExpression;
+		let configuredHappyBlinkWeight = 0;
 		if (request) {
 			const settings = vrmStore.expressionSettings;
 			const elapsed = Math.max(0, performance.now() - request.startedAt) / 1000;
@@ -1221,22 +1227,35 @@
 			lastConfiguredExpression = request.name;
 			setExpression(request.name, (settings.strengths[request.name] ?? request.value) * envelope);
 			if (request.name === 'happy' && settings.happyBlink > 0) {
-				const happyExpression = expressionManager.getExpression(findExpression(request.name) ?? request.name);
-				if (happyExpression && !happyBlinkOverride) {
-					happyBlinkOverride = { expression: happyExpression, value: happyExpression.overrideBlink };
-					happyExpression.overrideBlink = 'none';
-				}
-				for (const blinkName of ['blink', 'Blink', 'blinkLeft', 'blinkRight', 'eyeBlinkLeft', 'eyeBlinkRight']) {
-					setExpression(blinkName, settings.happyBlink * envelope);
-				}
-			} else restoreHappyBlinkOverride();
+				configuredHappyBlinkWeight = settings.happyBlink * envelope;
+			}
 			if (elapsed >= total) {
 				setExpression(request.name, 0);
-				for (const blinkName of ['blink', 'Blink', 'blinkLeft', 'blinkRight', 'eyeBlinkLeft', 'eyeBlinkRight']) setExpression(blinkName, 0);
-				restoreHappyBlinkOverride();
 				vrmStore.clearActiveExpression(request.seq);
 			}
-		} else restoreHappyBlinkOverride();
+		}
+
+		// Apply the same model-specific eye closure to both preview/AI expressions
+		// and direct avatar tap reactions. Some VRMs mark happy as blocking blink;
+		// temporarily lift that authored override while the explicit setting is active.
+		const happyBlinkWeight = Math.max(
+			configuredHappyBlinkWeight,
+			reactionHappyEnvelope * vrmStore.expressionSettings.happyBlink
+		);
+		if (happyBlinkWeight > 0) {
+			happyBlinkApplied = true;
+			const happyName = findExpression('happy') ?? 'happy';
+			const happyExpression = expressionManager.getExpression(happyName);
+			if (happyExpression && !happyBlinkOverride) {
+				happyBlinkOverride = { expression: happyExpression, value: happyExpression.overrideBlink };
+				happyExpression.overrideBlink = 'none';
+			}
+			for (const blinkName of ['blink', 'Blink', 'blinkLeft', 'blinkRight', 'eyeBlinkLeft', 'eyeBlinkRight']) setExpression(blinkName, happyBlinkWeight);
+		} else if (happyBlinkApplied) {
+			happyBlinkApplied = false;
+			for (const blinkName of ['blink', 'Blink', 'blinkLeft', 'blinkRight', 'eyeBlinkLeft', 'eyeBlinkRight']) setExpression(blinkName, 0);
+			restoreHappyBlinkOverride();
+		}
 
 		// Commit blinking, emotion and lip-sync together after all values are set.
 		expressionManager.update();
