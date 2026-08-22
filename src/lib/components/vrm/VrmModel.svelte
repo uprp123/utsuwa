@@ -666,7 +666,7 @@
 					const clip = createVRMAnimationClip(vrmAnimation, vrm);
 					const action = mixer.clipAction(clip);
 					action.setLoop(THREE.LoopOnce, 1);
-					action.clampWhenFinished = false;
+					action.clampWhenFinished = true;
 					action.timeScale = 1.5;
 					action.reset().fadeIn(0.2).play();
 					emoteAction = action;
@@ -682,9 +682,26 @@
 					const capturedMixer = mixer;
 					const capturedVrm = vrm;
 					const capturedIdleAction = currentIdle;
+					let transitionStarted = false;
+					const beginReturnTransition = () => {
+						if (transitionStarted || emoteAction !== action) return;
+						transitionStarted = true;
+						const fadeSeconds = 0.8;
+						action.fadeOut(fadeSeconds);
+						const stillSpeaking = ttsStore.isSpeaking || vrmStore.isTalking;
+						if (stillSpeaking && talkingAction) talkingAction.reset().fadeIn(fadeSeconds).play();
+						else if (capturedIdleAction) capturedIdleAction.fadeIn(fadeSeconds).play();
+					};
+					const playbackSeconds = clip.duration / Math.max(0.01, action.timeScale);
+					const returnTimer = setTimeout(
+						beginReturnTransition,
+						Math.max(0, (playbackSeconds - 0.8) * 1000)
+					);
 					const onFinished = (e: { action: THREE.AnimationAction }) => {
 						if (e.action === action) {
 							capturedMixer.removeEventListener('finished', onFinished);
+							clearTimeout(returnTimer);
+							beginReturnTransition();
 							action.stop();
 							isEmotePlaying = false;
 							emoteAction = null;
@@ -693,11 +710,6 @@
 							if (happyExpr) {
 								capturedVrm.expressionManager?.setValue(happyExpr, 0);
 							}
-
-							// Resume the correct base loop after the one-shot motion.
-							const stillSpeaking = ttsStore.isSpeaking || vrmStore.isTalking;
-							if (stillSpeaking && talkingAction) talkingAction.reset().fadeIn(0.3).play();
-							else if (capturedIdleAction) capturedIdleAction.reset().fadeIn(0.3).play();
 
 							vrmStore.setCurrentAnimation(null);
 						}

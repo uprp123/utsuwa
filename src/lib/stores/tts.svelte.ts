@@ -28,10 +28,18 @@ function createTTSStore() {
 		errorTimer = setTimeout(() => (lastError = null), 8000);
 	}
 
-	function buildCallbacks(): {
+	function buildCallbacks(onPlaybackStart?: () => void): {
 		onAnalyserUpdate: (analyser: AnalyserNode) => void;
+		onSegmentStart: () => void;
 	} {
+		let started = false;
 		return {
+			onSegmentStart: () => {
+				if (!started) {
+					started = true;
+					onPlaybackStart?.();
+				}
+			},
 			onAnalyserUpdate: (analyser: AnalyserNode) => {
 				currentAnalyser = analyser;
 			}
@@ -50,7 +58,7 @@ function createTTSStore() {
 			const sentences = splitIntoSentences(item.text);
 			const segments: SpeechSegment[] = sentences.map((sentence) => ({ text: sentence }));
 
-			await orchestrator.speakSegments(segments, item.options, buildCallbacks());
+			await orchestrator.speakSegments(segments, item.options, buildCallbacks(item.onPlaybackStart));
 		},
 		onError: (error) => {
 			console.error('TTS error:', error);
@@ -61,14 +69,15 @@ function createTTSStore() {
 		}
 	};
 
-	async function speak(text: string, options: TTSOptions) {
+	async function speak(text: string, options: TTSOptions, onPlaybackStart?: () => void) {
 		// Cloud providers need a key; local servers (e.g. Kokoro) don't.
 		if (!canSpeak(options)) {
 			console.warn('TTS not configured - missing API key');
+			onPlaybackStart?.();
 			return;
 		}
 
-		const next = enqueue(text, options, { isSpeaking, queue });
+		const next = enqueue(text, options, { isSpeaking, queue }, onPlaybackStart);
 		queue = next.queue;
 		await processQueue();
 	}

@@ -6,6 +6,7 @@ import type { TTSOptions } from '../services/tts/index.ts';
 export interface QueueItem {
 	text: string;
 	options: TTSOptions;
+	onPlaybackStart?: () => void;
 }
 
 export interface QueueSnapshot {
@@ -31,9 +32,10 @@ export function canSpeak(options: TTSOptions): boolean {
 export function enqueue(
 	text: string,
 	options: TTSOptions,
-	snapshot: QueueSnapshot
+	snapshot: QueueSnapshot,
+	onPlaybackStart?: () => void
 ): QueueSnapshot {
-	return { ...snapshot, queue: [...snapshot.queue, { text, options }] };
+	return { ...snapshot, queue: [...snapshot.queue, { text, options, onPlaybackStart }] };
 }
 
 /**

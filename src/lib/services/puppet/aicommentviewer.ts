@@ -24,7 +24,8 @@ export function parsePuppetText(input: string): { text: string; emotion?: string
 export async function deliverPuppetSpeech(
 	rawText: string,
 	explicitEmotion?: string,
-	motion?: string
+	motion?: string,
+	onPlaybackStart?: () => void
 ): Promise<string> {
 	const parsed = parsePuppetText(rawText);
 	const text = parsed.text;
@@ -54,7 +55,9 @@ export async function deliverPuppetSpeech(
 			numStep: (speechSettings.numStep as number) ?? undefined,
 			positionTemperature: (speechSettings.positionTemperature as number) ?? undefined,
 			classTemperature: (speechSettings.classTemperature as number) ?? undefined
-		});
+		}, onPlaybackStart);
+	} else {
+		onPlaybackStart?.();
 	}
 
 	return text;

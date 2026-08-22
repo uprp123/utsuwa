@@ -8,6 +8,7 @@ export interface PuppetMessage {
 	name?: string;
 	emotion?: string;
 	motion?: string;
+	message_id?: string;
 }
 
 interface PuppetSettings {
@@ -98,7 +99,7 @@ function createPuppetStore() {
 					if (parsed.type === 'chat' && typeof parsed.text === 'string' && parsed.text.trim()) {
 						listener?.({
 							type: 'chat', text: parsed.text, name: parsed.name,
-							emotion: parsed.emotion, motion: parsed.motion
+							emotion: parsed.emotion, motion: parsed.motion, message_id: parsed.message_id
 						});
 					}
 				} catch {
@@ -135,6 +136,12 @@ function createPuppetStore() {
 		if (settings.enabled) connect();
 	}
 
+	function sendEvent(type: string, messageId?: string) {
+		if (!socket || socket.readyState !== WebSocket.OPEN || !messageId) return false;
+		socket.send(JSON.stringify({ type, message_id: messageId }));
+		return true;
+	}
+
 	function start(onMessage: (message: PuppetMessage) => void) {
 		listener = onMessage;
 		if (settings.enabled) connect();
@@ -150,6 +157,7 @@ function createPuppetStore() {
 		get lastError() { return lastError; },
 		setEnabled,
 		setUrl,
+		sendEvent,
 		connect,
 		disconnect,
 		start
