@@ -40,7 +40,8 @@ interface MotionBackup {
 }
 
 export const MOTION_SLOTS = [
-	'happy', 'wave', 'clap', 'cheer', 'surprised', 'thinking', 'sad', 'angry', 'bow', 'dance'
+	'happy', 'wave', 'clap', 'cheer', 'surprised', 'thinking', 'sad', 'angry', 'bow', 'dance',
+	'showcase', 'greeting', 'peace', 'shoot', 'spin', 'model_pose', 'squat'
 ] as const;
 
 // Default models bundled with the app (first one is loaded by default).
@@ -154,6 +155,7 @@ function createVrmStore() {
 
 	// Animation state
 	let currentAnimation = $state<string | null>(null);
+	let currentAnimationRevision = $state(0);
 
 	// Talking animation state (triggered by text output)
 	let isTalking = $state(false);
@@ -196,14 +198,18 @@ function createVrmStore() {
 	// VRMA files shipped in static/animations/ that aren't part of the idle cycle
 	// or the talking loop.
 	const builtInAnimations: { id: string; name: string; url: string }[] = [
-		{ id: 'vrma_01', name: 'Emote 1', url: '/animations/VRMA_01.vrma' },
-		{ id: 'vrma_02', name: 'Emote 2', url: '/animations/VRMA_02.vrma' },
-		{ id: 'vrma_03', name: 'Emote 3', url: '/animations/VRMA_03.vrma' },
-		{ id: 'vrma_04', name: 'Emote 4', url: '/animations/VRMA_04.vrma' },
-		{ id: 'vrma_05', name: 'Emote 5', url: '/animations/VRMA_05.vrma' },
-		{ id: 'vrma_06', name: 'Emote 6', url: '/animations/VRMA_06.vrma' },
-		{ id: 'vrma_07', name: 'Emote 7', url: '/animations/VRMA_07.vrma' }
+		{ id: 'vrma_01', name: '全身を見せる', url: '/animations/VRMA_01.vrma' },
+		{ id: 'vrma_02', name: '挨拶', url: '/animations/VRMA_02.vrma' },
+		{ id: 'vrma_03', name: 'Vサイン', url: '/animations/VRMA_03.vrma' },
+		{ id: 'vrma_04', name: '撃つ', url: '/animations/VRMA_04.vrma' },
+		{ id: 'vrma_05', name: '回る', url: '/animations/VRMA_05.vrma' },
+		{ id: 'vrma_06', name: 'モデルポーズ', url: '/animations/VRMA_06.vrma' },
+		{ id: 'vrma_07', name: '屈伸運動', url: '/animations/VRMA_07.vrma' }
 	];
+	const defaultMotionAssignments: Record<string, string> = {
+		showcase: 'vrma_01', greeting: 'vrma_02', peace: 'vrma_03', shoot: 'vrma_04',
+		spin: 'vrma_05', model_pose: 'vrma_06', squat: 'vrma_07'
+	};
 	let availableAnimations = $state<{ id: string; name: string; url: string }[]>([
 		...builtInAnimations
 	]);
@@ -228,8 +234,8 @@ function createVrmStore() {
 				(await motionStorage?.getItem<string>('active-talking-animation-id')) ?? null;
 			randomIdleAnimationIds =
 				(await motionStorage?.getItem<string[]>('random-idle-animation-ids')) ?? [];
-			motionAssignments =
-				(await motionStorage?.getItem<Record<string, string>>('motion-assignments')) ?? {};
+			motionAssignments = { ...defaultMotionAssignments,
+				...((await motionStorage?.getItem<Record<string, string>>('motion-assignments')) ?? {}) };
 			applyAnimationAssignments();
 		} catch (e) {
 			console.error('Failed to restore custom animations:', e);
@@ -354,7 +360,8 @@ function createVrmStore() {
 
 		customAnimations = restored.map(({ metadata, blob }) => ({ ...metadata, url: URL.createObjectURL(blob) }));
 		availableAnimations = [...builtInAnimations, ...customAnimations];
-		const validId = (value: unknown): value is string => typeof value === 'string' && seen.has(value);
+		const validIds = new Set([...seen, ...builtInAnimations.map((item) => item.id)]);
+		const validId = (value: unknown): value is string => typeof value === 'string' && validIds.has(value);
 		activeIdleAnimationId = validId(backup.activeIdleAnimationId) ? backup.activeIdleAnimationId : null;
 		activeTalkingAnimationId = validId(backup.activeTalkingAnimationId) ? backup.activeTalkingAnimationId : null;
 		randomIdleAnimationIds = Array.isArray(backup.randomIdleAnimationIds)
@@ -431,7 +438,7 @@ function createVrmStore() {
 
 	function playMappedMotion(slot: string): boolean {
 		const animationId = motionAssignments[String(slot).trim().toLowerCase()];
-		if (!animationId || !customAnimations.some((animation) => animation.id === animationId)) return false;
+		if (!animationId || !availableAnimations.some((animation) => animation.id === animationId)) return false;
 		setCurrentAnimation(animationId);
 		return true;
 	}
@@ -666,6 +673,7 @@ function createVrmStore() {
 			const anim = availableAnimations.find((a) => a.id === animationIdOrPath);
 			currentAnimation = anim?.url || null;
 		}
+		currentAnimationRevision += 1;
 	}
 
 	// Start talking animation based on text length
@@ -828,6 +836,7 @@ function createVrmStore() {
 		get availableAnimations() {
 			return availableAnimations;
 		},
+		get currentAnimationRevision() { return currentAnimationRevision; },
 		get customAnimations() {
 			return customAnimations;
 		},

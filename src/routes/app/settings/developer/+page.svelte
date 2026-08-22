@@ -18,6 +18,7 @@
 	];
 
 	let currentDebugMode = $state('none');
+	let selectedAnimation = $state('none');
 
 	// Apply debug mode to all MToon materials in the VRM
 	function setMaterialDebugMode(mode: string) {
@@ -148,6 +149,7 @@
 
 	// Test blink
 	function testBlink() {
+		if (availableExpressions.includes('blink')) { vrmStore.flashExpression('blink', 1, 180); return; }
 		setExpression('eyeBlinkLeft', 1);
 		setExpression('eyeBlinkRight', 1);
 		setTimeout(() => {
@@ -158,6 +160,7 @@
 
 	// Test smile
 	function testSmile() {
+		if (availableExpressions.includes('happy')) { vrmStore.flashExpression('happy', 0.8, 1000); return; }
 		setExpression('mouthSmileLeft', 0.8);
 		setExpression('mouthSmileRight', 0.8);
 		setExpression('cheekSquintLeft', 0.3);
@@ -172,6 +175,7 @@
 
 	// Test surprised
 	function testSurprised() {
+		if (availableExpressions.includes('surprised')) { vrmStore.flashExpression('surprised', 0.8, 1000); return; }
 		setExpression('eyeWideLeft', 0.8);
 		setExpression('eyeWideRight', 0.8);
 		setExpression('browInnerUp', 0.7);
@@ -190,6 +194,7 @@
 
 	// Test sad
 	function testSad() {
+		if (availableExpressions.includes('sad')) { vrmStore.flashExpression('sad', 0.8, 1000); return; }
 		setExpression('browInnerUp', 0.6);
 		setExpression('browDownLeft', 0.3);
 		setExpression('browDownRight', 0.3);
@@ -206,6 +211,7 @@
 
 	// Open mouth for testing
 	function testMouthOpen() {
+		if (availableExpressions.includes('aa')) { vrmStore.flashExpression('aa', 0.8, 600); return; }
 		setExpression('jawOpen', 0.7);
 		setTimeout(() => {
 			setExpression('jawOpen', 0);
@@ -290,8 +296,7 @@
 <div class="developer-settings">
 	<div class="dev-header">
 		<div>
-			<h2>Developer Tools</h2>
-			<p class="description">Test and debug VRM facial expressions and animations.</p>
+			<h2>開発者ツール</h2><p class="description">VRMの表情とモーションをテストします。</p>
 		</div>
 	</div>
 
@@ -348,18 +353,17 @@
 
 			<!-- Animation Selection -->
 		<section class="section">
-			<h3>Animation</h3>
-			<p class="hint">Select an animation to play on the model.</p>
+			<h3>モーション</h3><p class="hint">選択したモーションをモデルで1回再生します。</p>
 			<div class="animation-select">
 				<select
-					value={vrmStore.currentAnimation || 'none'}
-					onchange={(e) => vrmStore.setCurrentAnimation(e.currentTarget.value === 'none' ? null : e.currentTarget.value)}
+					bind:value={selectedAnimation}
 				>
-					<option value="none">None (idle)</option>
+					<option value="none">なし（待機）</option>
 					{#each vrmStore.availableAnimations as anim}
 						<option value={anim.url}>{anim.name}</option>
 					{/each}
 				</select>
+				<button class="action-btn" onclick={() => vrmStore.setCurrentAnimation(selectedAnimation === 'none' ? null : selectedAnimation)}>再生</button>
 			</div>
 		</section>
 
@@ -381,14 +385,11 @@
 
 		<!-- Quick Actions -->
 		<section class="section">
-			<h3>Quick Tests</h3>
+			<h3>クイックテスト</h3>
 			<div class="quick-actions">
-				<button class="action-btn" onclick={testBlink}>Test Blink</button>
-				<button class="action-btn" onclick={testSmile}>Test Smile</button>
-				<button class="action-btn" onclick={testSurprised}>Test Surprised</button>
-				<button class="action-btn" onclick={testSad}>Test Sad</button>
-				<button class="action-btn" onclick={testMouthOpen}>Test Mouth Open</button>
-				<button class="action-btn reset" onclick={resetAll}>Reset All</button>
+				<button class="action-btn" onclick={testBlink}>まばたき</button><button class="action-btn" onclick={testSmile}>笑顔</button>
+				<button class="action-btn" onclick={testSurprised}>驚き</button><button class="action-btn" onclick={testSad}>悲しい</button>
+				<button class="action-btn" onclick={testMouthOpen}>口を開く</button><button class="action-btn reset" onclick={resetAll}>すべて戻す</button>
 			</div>
 		</section>
 

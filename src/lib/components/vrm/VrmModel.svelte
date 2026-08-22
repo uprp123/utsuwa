@@ -623,6 +623,7 @@
 
 	// Play emote animations when currentAnimation changes
 	$effect(() => {
+		vrmStore.currentAnimationRevision;
 		const animId = currentAnimation;
 		const currentVrm = vrm;
 		const currentMixer = mixer;

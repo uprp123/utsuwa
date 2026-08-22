@@ -73,30 +73,27 @@
 
 <div class="page">
 	<header class="page-header">
-		<h2>Motion</h2>
-		<p>Import VRMA files and assign them to idle or talking motion.</p>
+		<h2>モーション設定</h2><p>VRMAの登録と、待機・会話・AIモーションの割り当てを行います。</p>
 	</header>
 
 	<section class="section import-section">
 		<div>
-			<h3>Custom VRMA</h3>
-			<p>Files are stored locally in Utsuwa and remain available after restart.</p>
+			<h3>VRMAの追加</h3><p>ファイルはUtsuwa内に保存され、再起動後も使用できます。</p>
 		</div>
 		<label class="import-button" class:disabled={importing}>
-			{importing ? 'Importing…' : 'Import .vrma'}
+			{importing ? '読み込み中…' : 'VRMAを追加'}
 			<input type="file" accept=".vrma,.VRMA" multiple onchange={importFiles} disabled={importing} />
 		</label>
 	</section>
 
 	<section class="section backup-section">
 		<div>
-			<h3>Motion backup</h3>
-			<p>Exports VRMA files, idle choices, random idles, and every AI motion assignment into one file.</p>
+			<h3>モーションのバックアップ</h3><p>VRMA本体とすべての割り当てを1ファイルに保存します。</p>
 		</div>
 		<div class="backup-actions">
-			<button type="button" onclick={exportBackup} disabled={importing}>Export backup</button>
+			<button type="button" onclick={exportBackup} disabled={importing}>エクスポート</button>
 			<label class="import-button" class:disabled={importing}>
-				Import backup
+				インポート
 				<input type="file" accept=".json,application/json" onchange={importBackup} disabled={importing} />
 			</label>
 		</div>
@@ -106,26 +103,25 @@
 	{#if notice}<p class="notice">{notice}</p>{/if}
 
 	<section class="section assignments">
-		<h3>Assignments</h3>
+		<h3>基本モーション</h3>
 		<label>
-			<span>Idle motion</span>
+			<span>待機モーション</span>
 			<select value={vrmStore.activeIdleAnimationId ?? ''} onchange={(e) => vrmStore.setIdleAnimation(e.currentTarget.value || null)}>
-				<option value="">Built-in random idle</option>
+				<option value="">標準ランダム待機</option>
 				{#each vrmStore.customAnimations as motion}<option value={motion.id}>{motion.name}</option>{/each}
 			</select>
 		</label>
 		<label>
-			<span>Talking motion</span>
+			<span>会話モーション</span>
 			<select value={vrmStore.activeTalkingAnimationId ?? ''} onchange={(e) => vrmStore.setTalkingAnimation(e.currentTarget.value || null)}>
-				<option value="">Built-in talking motion</option>
+				<option value="">標準会話モーション</option>
 				{#each vrmStore.customAnimations as motion}<option value={motion.id}>{motion.name}</option>{/each}
 			</select>
 		</label>
 	</section>
 
 	<section class="section random-idles">
-		<h3>Random idle motions</h3>
-		<p>Selected motions are mixed into the idle rotation. After each one, Utsuwa continues with another idle motion.</p>
+		<h3>ランダム待機モーション</h3><p>選択したモーションを待機中のローテーションへ追加します。</p>
 		{#if vrmStore.customAnimations.length === 0}
 			<p class="empty">Import VRMA files to add random idle motions.</p>
 		{:else}
@@ -145,21 +141,20 @@
 	</section>
 
 	<section class="section assignments">
-		<h3>AI motion mapping</h3>
-		<p>Map motion names sent by AICommentViewer to imported VRMA files.</p>
+		<h3>AIモーション割り当て</h3><p>AICommentViewerから送られるモーション名に動きを割り当てます。</p>
 		{#each MOTION_SLOTS as slot}
 			<label>
 				<span>{slot}</span>
 				<select value={vrmStore.motionAssignments[slot] ?? ''} onchange={(e) => vrmStore.setMotionAssignment(slot, e.currentTarget.value || null)}>
-					<option value="">No motion</option>
-					{#each vrmStore.customAnimations as motion}<option value={motion.id}>{motion.name}</option>{/each}
+					<option value="">モーションなし</option>
+					{#each vrmStore.availableAnimations as motion}<option value={motion.id}>{motion.name}</option>{/each}
 				</select>
 			</label>
 		{/each}
 	</section>
 
 	<section class="section library">
-		<h3>Imported motions</h3>
+		<h3>追加済みモーション</h3>
 		{#if vrmStore.customAnimations.length === 0}
 			<p class="empty">No custom motion imported yet.</p>
 		{:else}
@@ -167,8 +162,8 @@
 				<div class="motion-row">
 					<div><strong>{motion.name}</strong><small>VRMA</small></div>
 					<div class="actions">
-						<button type="button" onclick={() => previewMotion(motion.id)}>Preview once</button>
-						<button class="danger" type="button" onclick={() => vrmStore.removeAnimation(motion.id)}>Remove</button>
+						<button type="button" onclick={() => previewMotion(motion.id)}>1回プレビュー</button>
+						<button class="danger" type="button" onclick={() => vrmStore.removeAnimation(motion.id)}>削除</button>
 					</div>
 				</div>
 			{/each}
