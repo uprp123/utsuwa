@@ -192,6 +192,7 @@ function createVrmStore() {
 	let activeIdleAnimationId = $state<string | null>(null);
 	let activeTalkingAnimationId = $state<string | null>(null);
 	let randomIdleAnimationIds = $state<string[]>([]);
+	let randomIdleAnimationRevision = $state(0);
 	let motionAssignments = $state<Record<string, string>>({});
 
 	// Selectable one-shot emotes (played via the developer tools). These are the
@@ -244,16 +245,14 @@ function createVrmStore() {
 
 	function applyAnimationAssignments() {
 		const idle = customAnimations.find((animation) => animation.id === activeIdleAnimationId);
-		const randomIdles = randomIdleAnimationIds
-			.map((id) => customAnimations.find((animation) => animation.id === id)?.url)
-			.filter((url): url is string => Boolean(url));
 		idleAnimationUrls = idle
-			? [...new Set([idle.url, ...randomIdles])]
-			: [...new Set([...builtInIdleAnimationUrls, ...randomIdles])];
+			? [idle.url]
+			: [...builtInIdleAnimationUrls];
 		const talking = customAnimations.find((animation) => animation.id === activeTalkingAnimationId);
 		talkingAnimationUrl = talking?.url ?? '/animations/talking.vrma';
 		idleAnimationRevision += 1;
 		talkingAnimationRevision += 1;
+		randomIdleAnimationRevision += 1;
 	}
 
 	async function saveAnimationList() {
@@ -849,6 +848,7 @@ function createVrmStore() {
 		get randomIdleAnimationIds() {
 			return randomIdleAnimationIds;
 		},
+		get randomIdleAnimationRevision() { return randomIdleAnimationRevision; },
 		get motionAssignments() {
 			return motionAssignments;
 		},

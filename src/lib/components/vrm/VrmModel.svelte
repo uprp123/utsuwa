@@ -232,6 +232,19 @@
 
 	// Idle animation cycling timer
 	let idleCycleTimeout: ReturnType<typeof setTimeout> | null = null;
+	let randomIdleTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	function scheduleRandomIdleMotion() {
+		if (randomIdleTimeout) clearTimeout(randomIdleTimeout);
+		const delay = (10 + Math.random() * 10) * 1000;
+		randomIdleTimeout = setTimeout(() => {
+			const ids = vrmStore.randomIdleAnimationIds;
+			if (ids.length && !shouldTalk && !isEmotePlaying && !photomodeStore.active) {
+				vrmStore.setCurrentAnimation(ids[Math.floor(Math.random() * ids.length)]);
+			}
+			scheduleRandomIdleMotion();
+		}, delay);
+	}
 
 	// Load and start the looping idle animation
 	function startIdleAnimation(targetVrm: VRM, targetMixer: THREE.AnimationMixer) {
@@ -341,6 +354,12 @@
 		if (idleCycleTimeout) clearTimeout(idleCycleTimeout);
 		if (idleAction) idleAction.fadeOut(0.3);
 		startIdleAnimation(targetVrm, targetMixer);
+	});
+
+	$effect(() => {
+		vrmStore.randomIdleAnimationRevision;
+		scheduleRandomIdleMotion();
+		return () => { if (randomIdleTimeout) clearTimeout(randomIdleTimeout); };
 	});
 
 	$effect(() => {
@@ -691,7 +710,7 @@
 							return;
 						}
 
-						const fadeSeconds = 0.3;
+						const fadeSeconds = 0.6;
 						action.fadeOut(fadeSeconds);
 						const returnIdle = idleAction;
 						if (returnIdle) returnIdle.reset().fadeIn(fadeSeconds).play();
@@ -849,6 +868,10 @@
 			if (idleCycleTimeout) {
 				clearTimeout(idleCycleTimeout);
 				idleCycleTimeout = null;
+			}
+			if (randomIdleTimeout) {
+				clearTimeout(randomIdleTimeout);
+				randomIdleTimeout = null;
 			}
 			if (mixer) {
 				mixer.stopAllAction();
