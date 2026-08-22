@@ -91,13 +91,17 @@
 	let stopPuppet: (() => void) | null = null;
 	$effect(() => {
 		stopPuppet = puppetStore.start(async (message) => {
-			const displayed = await deliverPuppetSpeech(
-				message.text,
-				message.emotion,
-				message.motion,
-				() => puppetStore.sendEvent('speech_started', message.message_id)
-			);
-			if (displayed) latestResponse = displayed;
+			try {
+				const displayed = await deliverPuppetSpeech(
+					message.text,
+					message.emotion,
+					message.motion,
+					() => puppetStore.sendEvent('speech_started', message.message_id)
+				);
+				if (displayed) latestResponse = displayed;
+			} finally {
+				puppetStore.sendEvent('speech_finished', message.message_id);
+			}
 		});
 		return () => {
 			stopPuppet?.();
