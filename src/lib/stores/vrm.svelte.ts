@@ -21,6 +21,24 @@ export interface CustomAnimation {
 	createdAt: number;
 }
 
+interface MotionBackupAnimation {
+	id: string;
+	name: string;
+	createdAt: number;
+	data: string;
+}
+
+interface MotionBackup {
+	format: 'utsuwa-motion-backup';
+	version: 1;
+	exportedAt: string;
+	animations: MotionBackupAnimation[];
+	activeIdleAnimationId: string | null;
+	activeTalkingAnimationId: string | null;
+	randomIdleAnimationIds: string[];
+	motionAssignments: Record<string, string>;
+}
+
 export const MOTION_SLOTS = [
 	'happy', 'wave', 'clap', 'cheer', 'surprised', 'thinking', 'sad', 'angry', 'bow', 'dance'
 ] as const;
@@ -253,6 +271,109 @@ function createVrmStore() {
 		customAnimations = [...customAnimations, animation];
 		availableAnimations = [...builtInAnimations, ...customAnimations];
 		await saveAnimationList();
+	}
+
+	async function blobToDataUrl(blob: Blob): Promise<string> {
+		return await new Promise((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve(String(reader.result ?? ''));
+			reader.onerror = () => reject(reader.error ?? new Error('Failed to read motion data'));
+			reader.readAsDataURL(blob);
+		});
+	}
+
+	function dataUrlToBlob(data: string): Blob {
+		const match = data.match(/^data:([^;,]+)?;base64,([A-Za-z0-9+/=]+)$/);
+		if (!match) throw new Error('Backup contains invalid motion data');
+		const binary = atob(match[2]);
+		const bytes = new Uint8Array(binary.length);
+		for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+		return new Blob([bytes], { type: match[1] || 'model/gltf-binary' });
+	}
+
+	async function exportMotionBackup(): Promise<Blob> {
+		const animations: MotionBackupAnimation[] = [];
+		for (const animation of customAnimations) {
+			const stored = await motionStorage?.getItem<Blob>(`animation-blob-${animation.id}`);
+			if (!stored) throw new Error(`Motion file is missing: ${animation.name}`);
+			animations.push({
+				id: animation.id,
+				name: animation.name,
+				createdAt: animation.createdAt,
+				data: await blobToDataUrl(stored)
+			});
+		}
+		const backup: MotionBackup = {
+			format: 'utsuwa-motion-backup',
+			version: 1,
+			exportedAt: new Date().toISOString(),
+			animations,
+			activeIdleAnimationId,
+			activeTalkingAnimationId,
+			randomIdleAnimationIds: [...randomIdleAnimationIds],
+			motionAssignments: { ...motionAssignments }
+		};
+		return new Blob([JSON.stringify(backup)], { type: 'application/json' });
+	}
+
+	async function importMotionBackup(file: File): Promise<number> {
+		if (file.size > 250 * 1024 * 1024) throw new Error('Motion backup is too large (maximum 250 MB)');
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(await file.text());
+		} catch {
+			throw new Error('Select a valid Utsuwa motion backup file');
+		}
+		if (!parsed || typeof parsed !== 'object') throw new Error('Invalid motion backup');
+		const backup = parsed as Partial<MotionBackup>;
+		if (backup.format !== 'utsuwa-motion-backup' || backup.version !== 1 || !Array.isArray(backup.animations)) {
+			throw new Error('Unsupported motion backup format');
+		}
+		if (backup.animations.length > 500) throw new Error('Motion backup contains too many files');
+
+		const seen = new Set<string>();
+		const restored: Array<{ metadata: Omit<CustomAnimation, 'url'>; blob: Blob }> = [];
+		for (const item of backup.animations) {
+			if (!item || typeof item.id !== 'string' || typeof item.name !== 'string' || typeof item.data !== 'string') {
+				throw new Error('Motion backup contains an invalid entry');
+			}
+			const id = item.id.trim();
+			if (!id || seen.has(id)) throw new Error('Motion backup contains duplicate motion IDs');
+			seen.add(id);
+			restored.push({
+				metadata: { id, name: item.name.trim() || 'Imported motion', createdAt: Number(item.createdAt) || Date.now() },
+				blob: dataUrlToBlob(item.data)
+			});
+		}
+
+		for (const animation of customAnimations) {
+			if (animation.url.startsWith('blob:')) URL.revokeObjectURL(animation.url);
+			await motionStorage?.removeItem(`animation-blob-${animation.id}`);
+		}
+		for (const item of restored) await motionStorage?.setItem(`animation-blob-${item.metadata.id}`, item.blob);
+
+		customAnimations = restored.map(({ metadata, blob }) => ({ ...metadata, url: URL.createObjectURL(blob) }));
+		availableAnimations = [...builtInAnimations, ...customAnimations];
+		const validId = (value: unknown): value is string => typeof value === 'string' && seen.has(value);
+		activeIdleAnimationId = validId(backup.activeIdleAnimationId) ? backup.activeIdleAnimationId : null;
+		activeTalkingAnimationId = validId(backup.activeTalkingAnimationId) ? backup.activeTalkingAnimationId : null;
+		randomIdleAnimationIds = Array.isArray(backup.randomIdleAnimationIds)
+			? [...new Set(backup.randomIdleAnimationIds.filter(validId))]
+			: [];
+		motionAssignments = Object.fromEntries(
+			Object.entries(backup.motionAssignments ?? {}).filter(
+				([slot, animationId]) => (MOTION_SLOTS as readonly string[]).includes(slot) && validId(animationId)
+			)
+		);
+		await saveAnimationList();
+		if (activeIdleAnimationId) await motionStorage?.setItem('active-idle-animation-id', activeIdleAnimationId);
+		else await motionStorage?.removeItem('active-idle-animation-id');
+		if (activeTalkingAnimationId) await motionStorage?.setItem('active-talking-animation-id', activeTalkingAnimationId);
+		else await motionStorage?.removeItem('active-talking-animation-id');
+		await motionStorage?.setItem('random-idle-animation-ids', randomIdleAnimationIds);
+		await motionStorage?.setItem('motion-assignments', motionAssignments);
+		applyAnimationAssignments();
+		return restored.length;
 	}
 
 	async function removeAnimation(id: string): Promise<void> {
@@ -771,6 +892,8 @@ function createVrmStore() {
 		stopTalking,
 		flashExpression,
 		addAnimation,
+		exportMotionBackup,
+		importMotionBackup,
 		removeAnimation,
 		setIdleAnimation,
 		setTalkingAnimation,
