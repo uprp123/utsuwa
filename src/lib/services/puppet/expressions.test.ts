@@ -5,7 +5,7 @@ import { getPuppetExpressionNames, resolvePuppetExpression } from './expressions
 test('exposes custom VRM expressions but hides technical face controls', () => {
 	const names = getPuppetExpressionNames([
 		'happy', 'confusion', 'tear', 'jitome', 'interest', 'serious', 'heart',
-		'aa', 'blink', 'lookUp'
+		'aa', 'blink', 'lookUp', 'eye_half_closed', 'mouth_smile_left'
 	]);
 	assert.deepEqual(names, [
 		'neutral', 'happy', 'confusion', 'tear', 'jitome', 'interest', 'serious', 'heart'
