@@ -28,6 +28,7 @@
 		puppetStore.setVoiceDefaults(defaultStyle, defaultWeight);
 		for (const emotion of emotions) {
 			const setting = voiceStyles[emotion];
+			if (!setting) continue;
 			puppetStore.setEmotionVoiceStyle(emotion, setting.style, setting.weight);
 		}
 	}
@@ -70,11 +71,13 @@
 			<input type="number" min="0" max="2" step="0.05" bind:value={defaultWeight} />
 		</div>
 		{#each emotions as emotion}
-			<div class="voice-grid">
-				<strong>{emotion}</strong>
-				<input bind:value={voiceStyles[emotion].style} placeholder="既定を使用" />
-				<input type="number" min="0" max="2" step="0.05" bind:value={voiceStyles[emotion].weight} />
-			</div>
+			{#if voiceStyles[emotion]}
+				<div class="voice-grid">
+					<strong>{emotion}</strong>
+					<input bind:value={voiceStyles[emotion].style} placeholder="既定を使用" />
+					<input type="number" min="0" max="2" step="0.05" bind:value={voiceStyles[emotion].weight} />
+				</div>
+			{/if}
 		{/each}
 		<button type="button" onclick={saveVoiceStyles}>音声スタイル設定を保存</button>
 	</section>
