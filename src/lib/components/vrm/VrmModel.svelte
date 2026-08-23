@@ -142,6 +142,7 @@
 	let lastConfiguredExpression: string | null = null;
 	let happyBlinkOverride: { expression: VRMExpression; value: VRMExpression['overrideBlink'] } | null = null;
 	let happyBlinkApplied = false;
+	let expressionNameLookup = new Map<string, string>();
 	function restoreHappyBlinkOverride() {
 		if (!happyBlinkOverride) return;
 		happyBlinkOverride.expression.overrideBlink = happyBlinkOverride.value;
@@ -845,7 +846,12 @@
 
 				// Optimize VRM
 				VRMUtils.removeUnnecessaryVertices(loadedVrm.scene);
-				VRMUtils.removeUnnecessaryJoints(loadedVrm.scene);
+				VRMUtils.combineSkeletons(loadedVrm.scene);
+				expressionNameLookup = new Map(
+					(loadedVrm.expressionManager?.expressions ?? []).map((entry) => [
+						entry.expressionName.toLowerCase(), entry.expressionName
+					])
+				);
 
 				// Skip frustum culling so animated meshes never pop out at the edges
 				loadedVrm.scene.traverse((obj) => {
@@ -1265,9 +1271,7 @@
 
 		// === Lip-sync Animation ===
 		const visemes = lipSyncAnalyzer.update(delta);
-		const expressionNames = expressionManager.expressions.map((entry) => entry.expressionName);
-		const findExpression = (name: string) =>
-			expressionNames.find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+		const findExpression = (name: string) => expressionNameLookup.get(name.toLowerCase());
 		const vrm1Names = ['aa', 'ih', 'ou', 'ee', 'oh'];
 		const legacyNames = ['a', 'i', 'u', 'e', 'o'];
 		const weights = [visemes.aa, visemes.ih, visemes.ou, visemes.ee, visemes.oh];

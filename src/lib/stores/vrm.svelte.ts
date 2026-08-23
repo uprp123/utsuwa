@@ -410,9 +410,17 @@ function createVrmStore() {
 	}
 
 	async function saveAnimationList() {
+		// Svelte 5のdeep state proxyはIndexedDBのstructured clone対象外。
+		// JSON化して完全なplain objectへ戻してからlocalforageへ保存する。
+		const serializable = JSON.parse(JSON.stringify(
+			customAnimations.map(({ id, name, createdAt, loop, lockFacing, facingStrength }) => ({
+				id, name, createdAt, loop: Boolean(loop), lockFacing: Boolean(lockFacing),
+				facingStrength: sanitizeFacingStrength(facingStrength)
+			}))
+		));
 		await motionStorage?.setItem(
 			'animation-list',
-			customAnimations.map(({ id, name, createdAt, loop, lockFacing, facingStrength }) => ({ id, name, createdAt, loop: Boolean(loop), lockFacing: Boolean(lockFacing), facingStrength: sanitizeFacingStrength(facingStrength) }))
+			serializable
 		);
 	}
 
