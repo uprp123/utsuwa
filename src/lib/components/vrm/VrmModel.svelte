@@ -143,6 +143,7 @@
 	let happyBlinkOverride: { expression: VRMExpression; value: VRMExpression['overrideBlink'] } | null = null;
 	let happyBlinkApplied = false;
 	let expressionNameLookup = new Map<string, string>();
+	let expressionValues = new Map<string, number>();
 	function restoreHappyBlinkOverride() {
 		if (!happyBlinkOverride) return;
 		happyBlinkOverride.expression.overrideBlink = happyBlinkOverride.value;
@@ -852,6 +853,7 @@
 						entry.expressionName.toLowerCase(), entry.expressionName
 					])
 				);
+				expressionValues = new Map();
 
 				// Skip frustum culling so animated meshes never pop out at the edges
 				loadedVrm.scene.traverse((obj) => {
@@ -1175,7 +1177,17 @@
 
 		// Update VRM core. The delta is clamped because a huge frame gap (tab
 		// refocus, window drag) otherwise launches the spring bones violently.
-		vrm.update(clampFrameDelta(delta));
+		const frameDelta = clampFrameDelta(delta);
+		// VRM.update() also updates every expression. Expressions are handled below
+		// only when a value changes, avoiding a full blendshape pass on every frame.
+		vrm.humanoid.update();
+		vrm.lookAt?.update(frameDelta);
+		vrm.nodeConstraintManager?.update();
+		vrm.springBoneManager?.update(frameDelta);
+		vrm.materials?.forEach((material) => {
+			const updatable = material as THREE.Material & { update?: (delta: number) => void };
+			updatable.update?.(frameDelta);
+		});
 
 		// Camera jiggle, phase 2: put the skeleton straight back. The solver
 		// already sampled the displaced pose; re-syncing the humanoid pushes
@@ -1214,11 +1226,16 @@
 
 		const expressionManager = vrm.expressionManager;
 		if (!expressionManager) return;
+		let expressionDirty = false;
 
 		// Helper to set expression (silently ignores if not found)
 		const setExpression = (name: string, value: number) => {
+			const previous = expressionValues.get(name);
+			if (previous !== undefined && Math.abs(previous - value) < 0.002) return;
 			try {
 				expressionManager.setValue(name, value);
+				expressionValues.set(name, value);
+				expressionDirty = true;
 			} catch {
 				// Expression doesn't exist on this model
 			}
@@ -1337,7 +1354,7 @@
 		}
 
 		// Commit blinking, emotion and lip-sync together after all values are set.
-		expressionManager.update();
+		if (expressionDirty) expressionManager.update();
 	});
 </script>
 
