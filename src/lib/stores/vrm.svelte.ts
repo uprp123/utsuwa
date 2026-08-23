@@ -593,7 +593,7 @@ function createVrmStore() {
 		else await motionStorage?.removeItem('active-idle-animation-id');
 		if (activeTalkingAnimationId) await motionStorage?.setItem('active-talking-animation-id', activeTalkingAnimationId);
 		else await motionStorage?.removeItem('active-talking-animation-id');
-		await motionStorage?.setItem('random-idle-animation-ids', randomIdleAnimationIds);
+		await motionStorage?.setItem('random-idle-animation-ids', [...randomIdleAnimationIds]);
 		await motionStorage?.setItem('random-idle-min-seconds', randomIdleMinSeconds);
 		await motionStorage?.setItem('random-idle-max-seconds', randomIdleMaxSeconds);
 		await motionStorage?.setItem('motion-transition-in-seconds', motionTransitionInSeconds);
@@ -602,7 +602,7 @@ function createVrmStore() {
 		else await motionStorage?.removeItem('no-motion-animation-id');
 		await motionStorage?.setItem('no-motion-lock-facing', noMotionLockFacing);
 		await motionStorage?.setItem('no-motion-facing-strength', noMotionFacingStrength);
-		await motionStorage?.setItem('motion-assignments', motionAssignments);
+		await motionStorage?.setItem('motion-assignments', { ...motionAssignments });
 		applyAnimationAssignments();
 		return restored.length;
 	}
