@@ -1029,6 +1029,24 @@
 	useTask((delta) => {
 		if (!vrm) return;
 		let reactionHappyEnvelope = 0;
+		const expressionManager = vrm.expressionManager;
+		let expressionDirty = false;
+
+		// Expression writes are deduplicated because expressionManager.update()
+		// walks the model's morph targets. Lip-sync uses this at display FPS while
+		// blink/emotion and the expensive VRM core remain capped below at 30Hz.
+		const setExpression = (name: string, value: number) => {
+			if (!expressionManager) return;
+			const previous = expressionValues.get(name);
+			if (previous !== undefined && Math.abs(previous - value) < 0.002) return;
+			try {
+				expressionManager.setValue(name, value);
+				expressionValues.set(name, value);
+				expressionDirty = true;
+			} catch {
+				// Expression doesn't exist on this model
+			}
+		};
 		// A completed exit intentionally stays visible on the final frame of its
 		// one-shot motion. The entrance clip crossfades from that held pose.
 		if (group) group.visible = true;
@@ -1152,13 +1170,42 @@
 			}
 		}
 
+		// Lip-sync is intentionally updated at display FPS. The previous global
+		// 30Hz gate made short syllables disappear and visibly reduced mouth-shape
+		// accuracy even though spring/material work no longer needed to run faster.
+		if (expressionManager) {
+			const visemes = lipSyncAnalyzer.update(clampFrameDelta(delta));
+			const findExpression = (name: string) => expressionNameLookup.get(name.toLowerCase());
+			const vrm1Names = ['aa', 'ih', 'ou', 'ee', 'oh'];
+			const legacyNames = ['a', 'i', 'u', 'e', 'o'];
+			const weights = [visemes.aa, visemes.ih, visemes.ou, visemes.ee, visemes.oh];
+			const family = vrm1Names.every((name) => findExpression(name))
+				? vrm1Names
+				: legacyNames.every((name) => findExpression(name))
+					? legacyNames
+					: null;
+			if (family) {
+				const dominantIndex = weights.indexOf(Math.max(...weights));
+				family.forEach((name, index) => {
+					const actualName = findExpression(name);
+					if (actualName) setExpression(actualName, index === dominantIndex ? Math.min(weights[index], 0.45) : 0);
+				});
+			} else {
+				const jawOpen = findExpression('jawOpen');
+				if (jawOpen) setExpression(jawOpen, Math.min(visemes.aa, 0.35));
+			}
+		}
+
 		// Camera jiggle, phase 1: displace the chest and head so the spring
 		// solver inside vrm.update() reads their movement and swings hair,
 		// clothes, and accessories accordingly.
 		// Mixer/camera interaction above stays at display FPS. Expensive humanoid,
 		// spring, material and expression work is capped at 30Hz for complex VRMs.
 		vrmCoreAccumulator += clampFrameDelta(delta);
-		if (vrmCoreAccumulator < VRM_CORE_STEP) return;
+		if (vrmCoreAccumulator < VRM_CORE_STEP) {
+			if (expressionDirty) expressionManager?.update();
+			return;
+		}
 		const coreDelta = Math.min(vrmCoreAccumulator, 0.1);
 		vrmCoreAccumulator = 0;
 		const jiggleActive =
@@ -1232,22 +1279,7 @@
 			vrmStore.setHeadScreenPosition({ x, y });
 		}
 
-		const expressionManager = vrm.expressionManager;
 		if (!expressionManager) return;
-		let expressionDirty = false;
-
-		// Helper to set expression (silently ignores if not found)
-		const setExpression = (name: string, value: number) => {
-			const previous = expressionValues.get(name);
-			if (previous !== undefined && Math.abs(previous - value) < 0.002) return;
-			try {
-				expressionManager.setValue(name, value);
-				expressionValues.set(name, value);
-				expressionDirty = true;
-			} catch {
-				// Expression doesn't exist on this model
-			}
-		};
 
 		// === Blinking Animation (runs during idle, disabled during emotes) ===
 		if (!isEmotePlaying) {
@@ -1294,27 +1326,7 @@
 			}
 		}
 
-		// === Lip-sync Animation ===
-		const visemes = lipSyncAnalyzer.update(coreDelta);
 		const findExpression = (name: string) => expressionNameLookup.get(name.toLowerCase());
-		const vrm1Names = ['aa', 'ih', 'ou', 'ee', 'oh'];
-		const legacyNames = ['a', 'i', 'u', 'e', 'o'];
-		const weights = [visemes.aa, visemes.ih, visemes.ou, visemes.ee, visemes.oh];
-		const family = vrm1Names.every((name) => findExpression(name))
-			? vrm1Names
-			: legacyNames.every((name) => findExpression(name))
-				? legacyNames
-				: null;
-		if (family) {
-			const dominantIndex = weights.indexOf(Math.max(...weights));
-			family.forEach((name, index) => {
-				const actualName = findExpression(name);
-				if (actualName) setExpression(actualName, index === dominantIndex ? Math.min(weights[index], 0.45) : 0);
-			});
-		} else {
-			const jawOpen = findExpression('jawOpen');
-			if (jawOpen) setExpression(jawOpen, Math.min(visemes.aa, 0.35));
-		}
 
 		// Model-specific expression envelope configured in Settings > Expressions.
 		const request = vrmStore.activeExpression;
