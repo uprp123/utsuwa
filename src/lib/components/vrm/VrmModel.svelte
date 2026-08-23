@@ -144,6 +144,8 @@
 	let happyBlinkApplied = false;
 	let expressionNameLookup = new Map<string, string>();
 	let expressionValues = new Map<string, number>();
+	let vrmCoreAccumulator = 0;
+	const VRM_CORE_STEP = 1 / 30;
 	function restoreHappyBlinkOverride() {
 		if (!happyBlinkOverride) return;
 		happyBlinkOverride.expression.overrideBlink = happyBlinkOverride.value;
@@ -1153,6 +1155,12 @@
 		// Camera jiggle, phase 1: displace the chest and head so the spring
 		// solver inside vrm.update() reads their movement and swings hair,
 		// clothes, and accessories accordingly.
+		// Mixer/camera interaction above stays at display FPS. Expensive humanoid,
+		// spring, material and expression work is capped at 30Hz for complex VRMs.
+		vrmCoreAccumulator += clampFrameDelta(delta);
+		if (vrmCoreAccumulator < VRM_CORE_STEP) return;
+		const coreDelta = Math.min(vrmCoreAccumulator, 0.1);
+		vrmCoreAccumulator = 0;
 		const jiggleActive =
 			Math.abs(jiggleState.yaw) > 1e-5 || Math.abs(jiggleState.pitch) > 1e-5;
 		let jiggleChest: THREE.Object3D | null = null;
@@ -1177,7 +1185,7 @@
 
 		// Update VRM core. The delta is clamped because a huge frame gap (tab
 		// refocus, window drag) otherwise launches the spring bones violently.
-		const frameDelta = clampFrameDelta(delta);
+		const frameDelta = coreDelta;
 		// VRM.update() also updates every expression. Expressions are handled below
 		// only when a value changes, avoiding a full blendshape pass on every frame.
 		vrm.humanoid.update();
@@ -1243,7 +1251,7 @@
 
 		// === Blinking Animation (runs during idle, disabled during emotes) ===
 		if (!isEmotePlaying) {
-			blinkTimer += delta;
+			blinkTimer += coreDelta;
 
 			if (!isBlinking && blinkTimer >= nextBlinkTime) {
 				// Start blink
@@ -1252,7 +1260,7 @@
 			}
 
 			if (isBlinking) {
-				blinkProgress += delta * 8; // Blink duration ~0.125s
+				blinkProgress += coreDelta * 8; // Blink duration ~0.125s
 
 				// Asymmetric blink curve: quick close (30%), slow open (70%)
 				let blinkValue: number;
@@ -1287,7 +1295,7 @@
 		}
 
 		// === Lip-sync Animation ===
-		const visemes = lipSyncAnalyzer.update(delta);
+		const visemes = lipSyncAnalyzer.update(coreDelta);
 		const findExpression = (name: string) => expressionNameLookup.get(name.toLowerCase());
 		const vrm1Names = ['aa', 'ih', 'ou', 'ee', 'oh'];
 		const legacyNames = ['a', 'i', 'u', 'e', 'o'];
