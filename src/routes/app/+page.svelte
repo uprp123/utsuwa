@@ -47,6 +47,7 @@
 	import { onDestroy } from 'svelte';
 	import { puppetStore } from '$lib/stores/puppet.svelte';
 	import { deliverPuppetSpeech } from '$lib/services/puppet/aicommentviewer';
+	import { getPuppetExpressionNames } from '$lib/services/puppet/expressions';
 	import { sendCompanionMessage, type SendCompanionMessageOptions } from '$lib/services/chat/companion-chat';
 	import { createReminderFiredHandler } from '$lib/services/chat/reminder-chat';
 	import { reminderStore } from '$lib/stores/reminders.svelte';
@@ -94,7 +95,7 @@
 			if (message.type === 'capabilities_request') {
 				puppetStore.sendMessage({
 					type: 'capabilities_response', request_id: message.request_id,
-					emotions: ['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed'],
+					emotions: getPuppetExpressionNames(vrmStore.availableExpressions),
 					motions: [...MOTION_SLOTS]
 				});
 				return;

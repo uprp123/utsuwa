@@ -1,15 +1,18 @@
 <script lang="ts">
 	import { puppetStore } from '$lib/stores/puppet.svelte';
+	import { vrmStore } from '$lib/stores/vrm.svelte';
+	import { getPuppetExpressionNames } from '$lib/services/puppet/expressions';
 	let draftUrl = $state(puppetStore.url);
-	const emotions = ['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed'];
+	let emotions = $derived(getPuppetExpressionNames(vrmStore.availableExpressions));
 	let defaultStyle = $state(puppetStore.defaultVoiceStyle);
 	let defaultWeight = $state(puppetStore.defaultVoiceStyleWeight);
-	let voiceStyles = $state<Record<string, { style: string; weight: number }>>(
-		Object.fromEntries(emotions.map((emotion) => [emotion, {
-			style: puppetStore.emotionVoiceStyles[emotion]?.style ?? '',
-			weight: puppetStore.emotionVoiceStyles[emotion]?.weight ?? 1
-		}]))
-	);
+	let voiceStyles = $state<Record<string, { style: string; weight: number }>>({});
+	$effect(() => {
+		for (const emotion of emotions) if (!voiceStyles[emotion]) voiceStyles[emotion] = {
+			style: puppetStore.emotionVoiceStyles[emotion.toLowerCase()]?.style ?? '',
+			weight: puppetStore.emotionVoiceStyles[emotion.toLowerCase()]?.weight ?? 1
+		};
+	});
 
 	const statusLabels: Record<string, string> = {
 		disabled: 'Disabled', connecting: 'Connecting…', connected: 'Connected',

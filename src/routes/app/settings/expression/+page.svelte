@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { vrmStore, type ExpressionSettings } from '$lib/stores/vrm.svelte';
 	import VrmScene from '$lib/components/vrm/VrmScene.svelte';
-	const names = [['happy','笑顔'],['sad','悲しい'],['angry','怒り'],['surprised','驚き'],['relaxed','リラックス']] as const;
+	import { getPuppetExpressionNames } from '$lib/services/puppet/expressions';
+	const labels: Record<string, string> = { happy:'笑顔', sad:'悲しい', angry:'怒り', surprised:'驚き', relaxed:'リラックス' };
+	let names = $derived(getPuppetExpressionNames(vrmStore.availableExpressions).filter((name) => name !== 'neutral'));
 	function copySettings(source: ExpressionSettings): ExpressionSettings {
 		return {
 			strengths: Object.fromEntries(Object.entries(source.strengths).map(([name, value]) => [name, Number(value)])),
@@ -11,6 +13,7 @@
 		};
 	}
 	let draft = $state<ExpressionSettings>(copySettings(vrmStore.expressionSettings));
+	$effect(() => { for (const name of names) if (draft.strengths[name] === undefined) draft.strengths[name] = .75; });
 	function save() { vrmStore.updateExpressionSettings(copySettings(draft)); }
 	function preview(name: string) { save(); vrmStore.flashExpression(name, draft.strengths[name] ?? .75, 3500); }
 </script>
@@ -26,8 +29,8 @@
 	<section class="section">
 		<h3>表情の強さ</h3>
 		<p class="help">0は表情なし、1はモデルに登録された表情を100%適用します。顔の動きを大きく作り直す設定ではなく、VRM制作者が登録した笑顔・悲しみなどを、どの程度混ぜるかを調整する値です。</p>
-		{#each names as [name,label]}
-			<div class="row"><span>{label}</span><input aria-label={`${label}の強さ`} type="range" min="0" max="1" step="0.05" bind:value={draft.strengths[name]} /><span>{Number(draft.strengths[name]).toFixed(2)}</span><button onclick={() => preview(name)}>確認</button></div>
+		{#each names as name}
+			<div class="row"><span>{labels[name.toLowerCase()] ?? name}</span><input aria-label={`${name}の強さ`} type="range" min="0" max="1" step="0.05" bind:value={draft.strengths[name]} /><span>{Number(draft.strengths[name]).toFixed(2)}</span><button onclick={() => preview(name)}>確認</button></div>
 		{/each}
 	</section>
 	<section class="section">

@@ -6,6 +6,7 @@ import { vrmStore } from '$lib/stores/vrm.svelte';
 import { puppetStore } from '$lib/stores/puppet.svelte';
 import { getTTSProvider } from '$lib/services/providers/registry';
 import type { TTSProvider } from '$lib/types';
+import { resolvePuppetExpression } from './expressions';
 
 const EMOTION_ALIASES: Record<string, string> = {
 	happy: 'happy', joy: 'happy', smile: 'happy',
@@ -18,7 +19,8 @@ const EMOTION_ALIASES: Record<string, string> = {
 export function parsePuppetText(input: string): { text: string; emotion?: string } {
 	const match = input.trim().match(/^\[([^\]]+)]\s*/);
 	if (!match) return { text: input.trim() };
-	const emotion = EMOTION_ALIASES[match[1].trim().toLowerCase()];
+	const key = match[1].trim().toLowerCase();
+	const emotion = EMOTION_ALIASES[key] ?? key;
 	return { text: input.slice(match[0].length).trim(), emotion };
 }
 
@@ -30,13 +32,14 @@ export async function deliverPuppetSpeech(
 ): Promise<string> {
 	const parsed = parsePuppetText(rawText);
 	const text = parsed.text;
-	const emotion = EMOTION_ALIASES[String(explicitEmotion ?? '').toLowerCase()] ?? parsed.emotion;
+	const requestedEmotion = EMOTION_ALIASES[String(explicitEmotion ?? '').toLowerCase()] ?? explicitEmotion ?? parsed.emotion;
+	const emotion = resolvePuppetExpression(requestedEmotion, vrmStore.availableExpressions);
 	const voiceStyle = puppetStore.resolveVoiceStyle(emotion);
 	if (!text) return '';
 
 	chatStore.addMessage('assistant', text);
 	vrmStore.startTalking(text);
-	if (emotion) vrmStore.flashExpression(emotion, 0.75, 3500);
+	if (emotion) vrmStore.flashExpression(emotion, vrmStore.expressionSettings.strengths[emotion] ?? 0.75, 3500);
 	if (!motion || motion === 'neutral' || !vrmStore.playMappedMotion(motion)) vrmStore.playNoMotion();
 
 	const speechState = modulesStore.getModuleState('speech');
