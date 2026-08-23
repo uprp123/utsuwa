@@ -12,6 +12,15 @@ test('exposes custom VRM expressions but hides technical face controls', () => {
 	]);
 });
 
+test('uses custom expression asset names without UniVRM expr_ prefixes', () => {
+	const available = ['happy', 'expr_confusion', 'expr_heart', 'expr_jitome'];
+	assert.deepEqual(getPuppetExpressionNames(available), [
+		'neutral', 'happy', 'confusion', 'heart', 'jitome'
+	]);
+	assert.equal(resolvePuppetExpression('confusion', available), 'expr_confusion');
+	assert.equal(resolvePuppetExpression('JITOME', available), 'expr_jitome');
+});
+
 test('resolves a synchronized expression case-insensitively to its exact VRM name', () => {
 	assert.equal(resolvePuppetExpression('jitome', ['Happy', 'Jitome']), 'Jitome');
 	assert.equal(resolvePuppetExpression('unknown', ['Happy', 'Jitome']), undefined);

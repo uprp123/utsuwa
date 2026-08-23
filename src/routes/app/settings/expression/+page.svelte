@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { vrmStore, type ExpressionSettings } from '$lib/stores/vrm.svelte';
 	import VrmScene from '$lib/components/vrm/VrmScene.svelte';
-	import { getPuppetExpressionNames } from '$lib/services/puppet/expressions';
+	import { getPuppetExpressionNames, resolvePuppetExpression } from '$lib/services/puppet/expressions';
 	const labels: Record<string, string> = { happy:'笑顔', sad:'悲しい', angry:'怒り', surprised:'驚き', relaxed:'リラックス' };
 	let names = $derived(getPuppetExpressionNames(vrmStore.availableExpressions).filter((name) => name !== 'neutral'));
 	function copySettings(source: ExpressionSettings): ExpressionSettings {
@@ -15,7 +15,11 @@
 	let draft = $state<ExpressionSettings>(copySettings(vrmStore.expressionSettings));
 	$effect(() => { for (const name of names) if (draft.strengths[name] === undefined) draft.strengths[name] = .75; });
 	function save() { vrmStore.updateExpressionSettings(copySettings(draft)); }
-	function preview(name: string) { save(); vrmStore.flashExpression(name, draft.strengths[name] ?? .75, 3500); }
+	function preview(name: string) {
+		save();
+		const vrmName = resolvePuppetExpression(name, vrmStore.availableExpressions);
+		if (vrmName) vrmStore.flashExpression(vrmName, draft.strengths[name] ?? .75, 3500);
+	}
 </script>
 
 <div class="page">
