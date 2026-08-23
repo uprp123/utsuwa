@@ -15,17 +15,25 @@ export interface PuppetControlMessage {
 	action: 'enter' | 'exit' | 'thinking_start' | 'thinking_stop';
 	message_id?: string;
 }
-export type PuppetMessage = PuppetChatMessage | PuppetControlMessage;
+export interface PuppetCapabilitiesRequest { type: 'capabilities_request'; request_id?: string; }
+export type PuppetMessage = PuppetChatMessage | PuppetControlMessage | PuppetCapabilitiesRequest;
+export interface EmotionVoiceStyle { style: string; weight: number; }
 
 interface PuppetSettings {
 	enabled: boolean;
 	url: string;
+	defaultVoiceStyle: string;
+	defaultVoiceStyleWeight: number;
+	emotionVoiceStyles: Record<string, EmotionVoiceStyle>;
 }
 
 const STORAGE_KEY = 'utsuwa-aicommentviewer-puppet';
 const DEFAULT_SETTINGS: PuppetSettings = {
 	enabled: false,
-	url: 'ws://127.0.0.1:8768/ws?room=lobby&name=Utsuwa'
+	url: 'ws://127.0.0.1:8768/ws?room=lobby&name=Utsuwa',
+	defaultVoiceStyle: '03',
+	defaultVoiceStyleWeight: 0.8,
+	emotionVoiceStyles: {}
 };
 
 const LEGACY_UTSUWA_URLS = new Set([
@@ -114,6 +122,8 @@ function createPuppetStore() {
 							action: parsed.action as PuppetControlMessage['action'],
 							message_id: parsed.message_id
 						});
+					} else if (parsed.type === 'capabilities_request') {
+						listener?.({ type: 'capabilities_request', request_id: String(parsed.request_id ?? '') });
 					}
 				} catch {
 					lastError = 'Unsupported WebSocket message received';
@@ -155,6 +165,34 @@ function createPuppetStore() {
 		return true;
 	}
 
+	function sendMessage(message: Record<string, unknown>) {
+		if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+		socket.send(JSON.stringify(message));
+		return true;
+	}
+
+	function setVoiceDefaults(style: string, weight: number) {
+		settings.defaultVoiceStyle = style.trim() || 'Neutral';
+		settings.defaultVoiceStyleWeight = Math.max(0, Math.min(2, Number(weight) || 0));
+		settings = { ...settings }; save();
+	}
+
+	function setEmotionVoiceStyle(emotion: string, style: string, weight: number) {
+		const key = emotion.trim().toLowerCase();
+		if (!key) return;
+		const next = { ...settings.emotionVoiceStyles };
+		if (style.trim()) next[key] = { style: style.trim(), weight: Math.max(0, Math.min(2, Number(weight) || 0)) };
+		else delete next[key];
+		settings.emotionVoiceStyles = next;
+		settings = { ...settings }; save();
+	}
+
+	function resolveVoiceStyle(emotion?: string): EmotionVoiceStyle {
+		return settings.emotionVoiceStyles[String(emotion ?? '').trim().toLowerCase()] ?? {
+			style: settings.defaultVoiceStyle, weight: settings.defaultVoiceStyleWeight
+		};
+	}
+
 	function start(onMessage: (message: PuppetMessage) => void) {
 		listener = onMessage;
 		if (settings.enabled) connect();
@@ -168,9 +206,16 @@ function createPuppetStore() {
 		get url() { return settings.url; },
 		get status() { return status; },
 		get lastError() { return lastError; },
+		get defaultVoiceStyle() { return settings.defaultVoiceStyle; },
+		get defaultVoiceStyleWeight() { return settings.defaultVoiceStyleWeight; },
+		get emotionVoiceStyles() { return settings.emotionVoiceStyles; },
 		setEnabled,
 		setUrl,
 		sendEvent,
+		sendMessage,
+		setVoiceDefaults,
+		setEmotionVoiceStyle,
+		resolveVoiceStyle,
 		connect,
 		disconnect,
 		start

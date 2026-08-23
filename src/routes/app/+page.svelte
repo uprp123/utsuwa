@@ -33,7 +33,7 @@
 	import { EventScene } from '$lib/components/events';
 	import { OnboardingModal } from '$lib/components/onboarding';
 	import MemoryGraphModal from '$lib/components/memory/MemoryGraphModal.svelte';
-	import { vrmStore } from '$lib/stores/vrm.svelte';
+	import { vrmStore, MOTION_SLOTS } from '$lib/stores/vrm.svelte';
 	import { chatStore } from '$lib/stores/chat.svelte';
 	import { modulesStore } from '$lib/stores/modules.svelte';
 	import { characterStore } from '$lib/stores/character.svelte';
@@ -91,6 +91,14 @@
 	let stopPuppet: (() => void) | null = null;
 	$effect(() => {
 		stopPuppet = puppetStore.start(async (message) => {
+			if (message.type === 'capabilities_request') {
+				puppetStore.sendMessage({
+					type: 'capabilities_response', request_id: message.request_id,
+					emotions: ['neutral', 'happy', 'sad', 'angry', 'surprised', 'relaxed'],
+					motions: [...MOTION_SLOTS]
+				});
+				return;
+			}
 			if (message.type === 'character_control') {
 				if (message.action === 'thinking_start') vrmStore.startThinkingMotion();
 				else if (message.action === 'thinking_stop') vrmStore.stopThinkingMotion(true);

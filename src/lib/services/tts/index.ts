@@ -19,6 +19,8 @@ export interface TTSOptions {
 	positionTemperature?: number;
 	/** OmniVoice class temperature. */
 	classTemperature?: number;
+	style?: string;
+	styleWeight?: number;
 	/** Alternative language that triggers the alternative voice. */
 	altLanguage?: string;
 	/** Voice ID used when the alternative language is active. */
@@ -120,7 +122,9 @@ export function getTTSProvider(options: TTSOptions): ITTSProvider {
 		currentOptions.instructions === options.instructions &&
 		currentOptions.numStep === options.numStep &&
 		currentOptions.positionTemperature === options.positionTemperature &&
-		currentOptions.classTemperature === options.classTemperature
+		currentOptions.classTemperature === options.classTemperature &&
+		currentOptions.style === options.style &&
+		currentOptions.styleWeight === options.styleWeight
 	) {
 		return currentProvider;
 	}

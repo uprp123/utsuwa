@@ -3,6 +3,7 @@ import { modulesStore } from '$lib/stores/modules.svelte';
 import { settingsStore } from '$lib/stores/settings.svelte';
 import { ttsStore } from '$lib/stores/tts.svelte';
 import { vrmStore } from '$lib/stores/vrm.svelte';
+import { puppetStore } from '$lib/stores/puppet.svelte';
 import { getTTSProvider } from '$lib/services/providers/registry';
 import type { TTSProvider } from '$lib/types';
 
@@ -30,6 +31,7 @@ export async function deliverPuppetSpeech(
 	const parsed = parsePuppetText(rawText);
 	const text = parsed.text;
 	const emotion = EMOTION_ALIASES[String(explicitEmotion ?? '').toLowerCase()] ?? parsed.emotion;
+	const voiceStyle = puppetStore.resolveVoiceStyle(emotion);
 	if (!text) return '';
 
 	chatStore.addMessage('assistant', text);
@@ -54,7 +56,9 @@ export async function deliverPuppetSpeech(
 			instructions: (speechSettings.instructions as string) || undefined,
 			numStep: (speechSettings.numStep as number) ?? undefined,
 			positionTemperature: (speechSettings.positionTemperature as number) ?? undefined,
-			classTemperature: (speechSettings.classTemperature as number) ?? undefined
+			classTemperature: (speechSettings.classTemperature as number) ?? undefined,
+			style: voiceStyle.style,
+			styleWeight: voiceStyle.weight
 		}, onPlaybackStart);
 	} else {
 		onPlaybackStart?.();

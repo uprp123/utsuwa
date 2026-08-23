@@ -35,6 +35,8 @@ export class OpenAITTS implements ITTSProvider {
 	private numStep: number;
 	private positionTemperature: number;
 	private classTemperature: number;
+	private style?: string;
+	private styleWeight?: number;
 	private baseUrl: string;
 	private isLocal: boolean;
 	private isOmniVoice: boolean;
@@ -53,6 +55,8 @@ export class OpenAITTS implements ITTSProvider {
 		this.numStep = options.numStep ?? 32;
 		this.positionTemperature = options.positionTemperature ?? 1;
 		this.classTemperature = options.classTemperature ?? 0.2;
+		this.style = options.style;
+		this.styleWeight = options.styleWeight;
 		this.isLocal = isLocalTTSProvider(options.provider);
 		// omnivoice is a member of LOCAL_TTS_PROVIDERS, so isLocal alone sweeps it
 		// in. URL normalization does want that; the hints and error text do not.
@@ -97,6 +101,8 @@ export class OpenAITTS implements ITTSProvider {
 					...(this.isOmniVoice ? { language: options?.language ?? this.language } : {}),
 					speed: options?.speed ?? this.speed,
 					response_format: this.isOmniVoice ? 'wav' : 'mp3',
+					...(this.isPlainLocal && this.style ? { style: this.style } : {}),
+					...(this.isPlainLocal && this.styleWeight !== undefined ? { style_weight: this.styleWeight } : {}),
 					...(this.isOmniVoice && this.instructions && !this.voiceId.startsWith('clone:')
 						? { instructions: this.instructions }
 						: {}),
