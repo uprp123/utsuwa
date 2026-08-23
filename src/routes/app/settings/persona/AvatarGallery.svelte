@@ -4,8 +4,17 @@
 	import { Icon } from '$lib/components/ui';
 	import VrmUploader from '$lib/components/vrm/VrmUploader.svelte';
 	import type { PersonaPageState } from './persona-page.svelte';
+	import type { VrmModel } from '$lib/stores/vrm.svelte';
 
 	let { page }: { page: PersonaPageState } = $props();
+
+	async function requestModelRemoval(model: VrmModel) {
+		const activeNote = model.id === vrmStore.activeModelId
+			? '\n\n現在使用中のため、削除後は標準モデルに切り替わります。'
+			: '';
+		if (!confirm(`「${model.name}」を削除しますか？${activeNote}\n\nこの操作は元に戻せません。`)) return;
+		await vrmStore.removeModel(model.id);
+	}
 </script>
 
 <!-- Model Gallery (inline) -->
@@ -20,25 +29,37 @@
 
 	<div class="gallery-grid">
 		{#each vrmStore.models as model (model.id)}
-			<button
-				class="model-card"
-				class:active={model.id === vrmStore.activeModelId}
-				onclick={() => vrmStore.setActiveModel(model.id)}
-			>
-				<div class="model-preview">
-					{#if model.previewUrl}
-						<img src={model.previewUrl} alt={model.name} />
-					{:else}
-						<Icon name="user" size={24} />
-					{/if}
-					{#if model.id === vrmStore.activeModelId}
-						<div class="active-check">
-							<Icon name="check" size={12} strokeWidth={3} />
-						</div>
-					{/if}
-				</div>
-				<span class="model-name">{model.name}</span>
-			</button>
+			<div class="model-card-shell">
+				<button
+					class="model-card"
+					class:active={model.id === vrmStore.activeModelId}
+					onclick={() => vrmStore.setActiveModel(model.id)}
+				>
+					<div class="model-preview">
+						{#if model.previewUrl}
+							<img src={model.previewUrl} alt={model.name} />
+						{:else}
+							<Icon name="user" size={24} />
+						{/if}
+						{#if model.id === vrmStore.activeModelId}
+							<div class="active-check">
+								<Icon name="check" size={12} strokeWidth={3} />
+							</div>
+						{/if}
+					</div>
+					<span class="model-name">{model.name}</span>
+				</button>
+				{#if !model.isDefault}
+					<button
+						class="delete-model-btn"
+						title={`${model.name}を削除`}
+						aria-label={`${model.name}を削除`}
+						onclick={() => requestModelRemoval(model)}
+					>
+						<Icon name="trash-2" size={15} />
+					</button>
+				{/if}
+			</div>
 		{/each}
 	</div>
 </div>
@@ -114,6 +135,7 @@
 	}
 
 	.model-card {
+		width: 100%;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -124,6 +146,37 @@
 		cursor: pointer;
 		transition: background 0.15s ease, box-shadow 0.15s ease;
 		box-shadow: var(--shadow-xs);
+	}
+
+	.model-card-shell {
+		position: relative;
+		min-width: 0;
+	}
+
+	.delete-model-btn {
+		position: absolute;
+		top: 0.35rem;
+		left: 0.35rem;
+		z-index: 2;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		padding: 0;
+		border-radius: var(--radius-full);
+		background: color-mix(in srgb, var(--color-error) 88%, transparent);
+		color: #fff;
+		box-shadow: var(--shadow-sm);
+		cursor: pointer;
+		opacity: 0.88;
+		transition: opacity 0.15s ease, transform 0.15s ease;
+	}
+
+	.delete-model-btn:hover,
+	.delete-model-btn:focus-visible {
+		opacity: 1;
+		transform: scale(1.07);
 	}
 
 	.model-card:hover {
