@@ -799,6 +799,10 @@ function createVrmStore() {
 	}
 
 	async function initFromStorage() {
+		const safeModelBoot = browser && (() => {
+			const params = new URLSearchParams(window.location.search);
+			return params.get('safeModel') === '1' || params.get('safe') === '1';
+		})();
 		try {
 			// Load saved models list
 			const savedModels = await vrmStorage?.getItem<VrmModel[]>('model-list');
@@ -834,8 +838,13 @@ function createVrmStore() {
 				previews[i] ? { ...model, previewUrl: previews[i] } : model
 			);
 
-			// Load active model ID
-			const savedActiveId = await vrmStorage?.getItem<string>('active-model-id');
+			// A custom VRM is copied into IndexedDB when it is imported. Replacing the
+			// original file on disk therefore cannot repair an active model that is too
+			// heavy to render. Safe boot keeps every imported model, but starts with the
+			// bundled model and makes that the next normal startup model as well.
+			const savedActiveId = safeModelBoot
+				? null
+				: await vrmStorage?.getItem<string>('active-model-id');
 			if (savedActiveId) {
 				const activeModel = models.find((m) => m.id === savedActiveId);
 				if (activeModel) {
@@ -849,6 +858,9 @@ function createVrmStore() {
 			} else {
 				activeModelId = DEFAULT_MODELS[0].id;
 				modelUrl = DEFAULT_MODELS[0].url;
+				if (safeModelBoot) {
+					await vrmStorage?.setItem('active-model-id', activeModelId);
+				}
 			}
 		} catch (e) {
 			console.error('Failed to load VRM storage:', e);
@@ -860,6 +872,12 @@ function createVrmStore() {
 		readyResolve?.();
 		// Flush any saves that were blocked during init
 		await saveToStorage();
+		if (safeModelBoot) {
+			const cleanUrl = new URL(window.location.href);
+			cleanUrl.searchParams.delete('safeModel');
+			cleanUrl.searchParams.delete('safe');
+			window.history.replaceState(window.history.state, '', cleanUrl);
+		}
 	}
 
 	async function saveToStorage() {
