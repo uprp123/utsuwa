@@ -39,33 +39,46 @@ export async function deliverPuppetSpeech(
 	if (!text) return '';
 
 	chatStore.addMessage('assistant', text);
-	vrmStore.startTalking(text);
-	if (emotion) vrmStore.flashExpression(emotion, vrmStore.expressionSettings.strengths[publicEmotion!] ?? 0.75, 3500);
-	if (!motion || motion === 'neutral' || !vrmStore.playMappedMotion(motion)) vrmStore.playNoMotion();
+	let expressionSeq: number | undefined;
+	const beginVisuals = () => {
+		// Start expression and motion on the first real audio frame. Starting them
+		// when the message was merely queued made later comments animate early.
+		vrmStore.startTalking(text);
+		expressionSeq = emotion
+			? vrmStore.flashExpression(emotion, vrmStore.expressionSettings.strengths[publicEmotion!] ?? 0.75, 10 * 60 * 1000)
+			: undefined;
+		if (!motion || motion === 'neutral' || !vrmStore.playMappedMotion(motion)) vrmStore.playNoMotion();
+		onPlaybackStart?.();
+	};
 
 	const speechState = modulesStore.getModuleState('speech');
 	const speechSettings = modulesStore.getModuleSettings('speech');
-	if (speechState?.enabled) {
-		const provider = speechSettings.activeProvider as TTSProvider;
-		const providerConfig = settingsStore.getProviderConfig(provider);
-		const metadata = getTTSProvider(provider);
-		await ttsStore.speak(text, {
-			provider,
-			apiKey: providerConfig.apiKey,
-			voiceId: (speechSettings.activeVoiceId as string) || providerConfig.voiceId,
-			model: (speechSettings.activeModel as string) || providerConfig.modelId,
-			baseUrl: providerConfig.baseUrl || metadata?.defaultBaseUrl,
-			speed: (speechSettings.speed as number) ?? 1,
-			language: (speechSettings.activeLanguage as string) || undefined,
-			instructions: (speechSettings.instructions as string) || undefined,
-			numStep: (speechSettings.numStep as number) ?? undefined,
-			positionTemperature: (speechSettings.positionTemperature as number) ?? undefined,
-			classTemperature: (speechSettings.classTemperature as number) ?? undefined,
-			style: voiceStyle.style,
-			styleWeight: voiceStyle.weight
-		}, onPlaybackStart);
-	} else {
-		onPlaybackStart?.();
+	try {
+		if (speechState?.enabled) {
+			const provider = speechSettings.activeProvider as TTSProvider;
+			const providerConfig = settingsStore.getProviderConfig(provider);
+			const metadata = getTTSProvider(provider);
+			await ttsStore.speak(text, {
+				provider,
+				apiKey: providerConfig.apiKey,
+				voiceId: (speechSettings.activeVoiceId as string) || providerConfig.voiceId,
+				model: (speechSettings.activeModel as string) || providerConfig.modelId,
+				baseUrl: providerConfig.baseUrl || metadata?.defaultBaseUrl,
+				speed: (speechSettings.speed as number) ?? 1,
+				language: (speechSettings.activeLanguage as string) || undefined,
+				instructions: (speechSettings.instructions as string) || undefined,
+				numStep: (speechSettings.numStep as number) ?? undefined,
+				positionTemperature: (speechSettings.positionTemperature as number) ?? undefined,
+				classTemperature: (speechSettings.classTemperature as number) ?? undefined,
+				style: voiceStyle.style,
+				styleWeight: voiceStyle.weight
+			}, beginVisuals);
+		} else {
+			beginVisuals();
+		}
+	} finally {
+		vrmStore.stopTalking();
+		if (expressionSeq !== undefined) vrmStore.releaseActiveExpression(expressionSeq);
 	}
 
 	return text;

@@ -7,6 +7,7 @@ export interface QueueItem {
 	text: string;
 	options: TTSOptions;
 	onPlaybackStart?: () => void;
+	onPlaybackEnd?: () => void;
 }
 
 export interface QueueSnapshot {
@@ -33,9 +34,10 @@ export function enqueue(
 	text: string,
 	options: TTSOptions,
 	snapshot: QueueSnapshot,
-	onPlaybackStart?: () => void
+	onPlaybackStart?: () => void,
+	onPlaybackEnd?: () => void
 ): QueueSnapshot {
-	return { ...snapshot, queue: [...snapshot.queue, { text, options, onPlaybackStart }] };
+	return { ...snapshot, queue: [...snapshot.queue, { text, options, onPlaybackStart, onPlaybackEnd }] };
 }
 
 /**
@@ -80,6 +82,7 @@ export async function runQueue(engine: QueueEngine): Promise<void> {
 	} catch (error) {
 		engine.onError?.(error);
 	} finally {
+		claim.item.onPlaybackEnd?.();
 		engine.snapshot = finishCurrent(engine.snapshot);
 		engine.onFinished?.();
 		await runQueue(engine);

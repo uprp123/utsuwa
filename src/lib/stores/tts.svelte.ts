@@ -77,9 +77,14 @@ function createTTSStore() {
 			return;
 		}
 
-		const next = enqueue(text, options, { isSpeaking, queue }, onPlaybackStart);
-		queue = next.queue;
-		await processQueue();
+		// Resolve this call when its own queued utterance finishes, not merely when
+		// another utterance is already playing. Puppet expression/motion timing
+		// relies on this boundary for back-to-back comments.
+		await new Promise<void>((resolve) => {
+			const next = enqueue(text, options, { isSpeaking, queue }, onPlaybackStart, resolve);
+			queue = next.queue;
+			void processQueue();
+		});
 	}
 
 	async function processQueue() {
@@ -88,6 +93,8 @@ function createTTSStore() {
 
 	function stop() {
 		orchestrator.interrupt();
+		// Unblock callers waiting for queued utterances that are being discarded.
+		for (const item of queue) item.onPlaybackEnd?.();
 		// clearQueue resets the queue snapshot only; currentAnalyser is store-level
 		// state and is cleared separately below.
 		const cleared = clearQueue({ isSpeaking, queue });

@@ -885,6 +885,7 @@
 				const newMixer = new THREE.AnimationMixer(loadedVrm.scene);
 				mixer = newMixer;
 				vrmStore.setVrm(loadedVrm);
+				vrmStore.markModelLoadSucceeded(loadModelId);
 				vrmStore.setLoading(false);
 
 				// Start the looping idle animation

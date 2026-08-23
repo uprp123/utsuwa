@@ -147,6 +147,17 @@ test('runQueue plays all queued items in order', async () => {
 	assert.equal(engine.snapshot.queue.length, 0);
 });
 
+test('runQueue reports completion for each queued utterance', async () => {
+	const completed: string[] = [];
+	let snapshot = enqueue('first', cloudOptions, empty, undefined, () => completed.push('first'));
+	snapshot = enqueue('second', localOptions, snapshot, undefined, () => completed.push('second'));
+	const engine = makeEngine(snapshot);
+
+	await runQueue(engine);
+
+	assert.deepEqual(completed, ['first', 'second']);
+});
+
 test('runQueue does nothing when already speaking', async () => {
 	let calls = 0;
 	const engine = makeEngine({ isSpeaking: true, queue: [{ text: 'a', options: cloudOptions }] });

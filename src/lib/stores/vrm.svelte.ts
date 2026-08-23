@@ -105,6 +105,7 @@ const DEFAULT_MODELS: VrmModel[] = [
 
 // Bumped when thumbnail generation changes so stale previews regenerate
 const PREVIEW_KEY_PREFIX = 'model-preview-v2-';
+const MODEL_LOAD_PENDING_KEY = 'utsuwa-vrm-load-pending';
 
 // Configure localforage for VRM storage
 const vrmStorage = browser
@@ -842,13 +843,23 @@ function createVrmStore() {
 			// original file on disk therefore cannot repair an active model that is too
 			// heavy to render. Safe boot keeps every imported model, but starts with the
 			// bundled model and makes that the next normal startup model as well.
-			const savedActiveId = safeModelBoot
+			let savedActiveId = safeModelBoot
 				? null
 				: await vrmStorage?.getItem<string>('active-model-id');
+			// If the previous page load never reached the VRM loader's success
+			// callback, do not retry the same custom model forever. A normal reload
+			// then recovers automatically instead of requiring ?safeModel=1.
+			const pendingModelId = localStorage.getItem(MODEL_LOAD_PENDING_KEY);
+			if (savedActiveId && pendingModelId === savedActiveId) {
+				savedActiveId = null;
+				localStorage.removeItem(MODEL_LOAD_PENDING_KEY);
+				await vrmStorage?.setItem('active-model-id', DEFAULT_MODELS[0].id);
+			}
 			if (savedActiveId) {
 				const activeModel = models.find((m) => m.id === savedActiveId);
 				if (activeModel) {
 					activeModelId = savedActiveId;
+					if (!activeModel.isDefault) localStorage.setItem(MODEL_LOAD_PENDING_KEY, savedActiveId);
 					modelUrl = activeModel.url;
 				} else {
 					activeModelId = DEFAULT_MODELS[0].id;
@@ -857,6 +868,7 @@ function createVrmStore() {
 				}
 			} else {
 				activeModelId = DEFAULT_MODELS[0].id;
+				localStorage.removeItem(MODEL_LOAD_PENDING_KEY);
 				modelUrl = DEFAULT_MODELS[0].url;
 				if (safeModelBoot) {
 					await vrmStorage?.setItem('active-model-id', activeModelId);
@@ -944,11 +956,20 @@ function createVrmStore() {
 	async function setActiveModel(id: string) {
 		const model = models.find((m) => m.id === id);
 		if (model) {
-		activeModelId = id;
-		loadExpressionSettings(id);
+			activeModelId = id;
+			loadExpressionSettings(id);
+			if (model.isDefault) localStorage.removeItem(MODEL_LOAD_PENDING_KEY);
+			else localStorage.setItem(MODEL_LOAD_PENDING_KEY, id);
 			modelUrl = model.url;
 			await saveToStorage();
 			broadcastModelChange();
+		}
+	}
+
+	function markModelLoadSucceeded(id: string | null) {
+		if (!browser || !id) return;
+		if (localStorage.getItem(MODEL_LOAD_PENDING_KEY) === id) {
+			localStorage.removeItem(MODEL_LOAD_PENDING_KEY);
 		}
 	}
 
@@ -968,6 +989,7 @@ function createVrmStore() {
 		if (model) {
 			activeModelId = savedActiveId;
 			loadExpressionSettings(savedActiveId);
+			if (!model.isDefault) localStorage.setItem(MODEL_LOAD_PENDING_KEY, savedActiveId);
 			modelUrl = model.url;
 		} else {
 			// New custom model added in another window — full re-init
@@ -1050,9 +1072,22 @@ function createVrmStore() {
 		isTalking = false;
 	}
 
-	function flashExpression(name: string, value = 0.75, durationMs = 3000) {
-		if (!vrm?.expressionManager || !availableExpressions.includes(name)) return false;
-		activeExpression = { name, value, startedAt: performance.now(), durationMs, seq: ++expressionSeq };
+	function flashExpression(name: string, value = 0.75, durationMs = 3000): number | undefined {
+		if (!vrm?.expressionManager || !availableExpressions.includes(name)) return undefined;
+		const seq = ++expressionSeq;
+		activeExpression = { name, value, startedAt: performance.now(), durationMs, seq };
+		return seq;
+	}
+
+	function releaseActiveExpression(seq: number) {
+		if (activeExpression?.seq !== seq) return;
+		const fadeIn = Math.max(0.01, expressionSettings.fadeIn);
+		const fadeOut = Math.max(0.01, expressionSettings.fadeOut);
+		activeExpression = {
+			...activeExpression,
+			startedAt: performance.now() - fadeIn * 1000,
+			durationMs: (fadeIn + fadeOut) * 1000
+		};
 		return true;
 	}
 
@@ -1261,10 +1296,12 @@ function createVrmStore() {
 		setLoading,
 		setError,
 		setActiveModel,
+		markModelLoadSucceeded,
 		setCurrentAnimation,
 		startTalking,
 		stopTalking,
 		flashExpression,
+		releaseActiveExpression,
 		addAnimation,
 		exportMotionBackup,
 		importMotionBackup,
